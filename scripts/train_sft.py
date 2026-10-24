@@ -64,6 +64,8 @@ def main():
     ap.add_argument("--drop-outcome", type=float, default=0.1)
     ap.add_argument("--max-steps", type=int, default=0, help="debug: stop after n steps")
     ap.add_argument("--out", default="sft")
+    ap.add_argument("--resume", action="store_true", help="continue from <out>_last.pt")
+    ap.add_argument("--save-every", type=int, default=1000)
     a = ap.parse_args()
 
     torch.manual_seed(SEED)
@@ -85,26 +87,54 @@ def main():
         opt, lambda s: min(1, (s + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / max(1, total)))))
     print(f"windows/epoch {n_win}, steps {total}, val subset {len(vsub)} user-days", flush=True)
     log, best, step, t0 = [], -1.0, 0, time.time()
-    for ep in range(a.epochs):
+    start_ep, start_i = 0, 0
+    last = CKPT / f"{a.out}_last.pt"
+    if a.resume and last.exists():
+        ck = torch.load(last, map_location=dev, weights_only=False)
+        model.load_state_dict(ck["state"])
+        opt.load_state_dict(ck["opt"])
+        sched.load_state_dict(ck["sched"])
+        step, start_ep, start_i, log, best = ck["step"], ck["ep"], ck["i"], ck["log"], ck["best"]
+        print(f"resumed at step {step} (epoch {start_ep}, batch offset {start_i})", flush=True)
+    for ep in range(start_ep, a.epochs):
         model.train()
-        wins = windows(seq, ends, a.len, rng)
+        # Windows depend only on (seed, epoch), so a resumed run sees the same order.
+        wins = windows(seq, ends, a.len, np.random.default_rng(SEED + ep))
+        brng = np.random.default_rng(SEED + 100 + ep)
         run = 0.0
         for i in range(0, len(wins) - a.bs + 1, a.bs):
-            b = make_batch(seq, wins[i:i + a.bs], a.len + 1, dev, drop_outcome=a.drop_outcome, rng=rng)
+            if ep == start_ep and i < start_i:
+                continue
+            b = make_batch(seq, wins[i:i + a.bs], a.len + 1, dev, drop_outcome=a.drop_outcome, rng=brng)
             inp = {k: v[:, :-1] for k, v in b.items()}
             y = b["tok"][:, 1:]
             # Train on positions with at least MIN_CTX events of context (eval contexts are long).
             ctx_len = inp["mask"].long().cumsum(1)
             keep = b["mask"][:, 1:] & inp["mask"] & (y >= N_SPECIAL) & (ctx_len >= MIN_CTX)
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                h = model.hidden(inp)
-                loss = chunked_ce(model, h[keep], y[keep])
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
+            for attempt in range(6):
+                try:
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        h = model.hidden(inp)
+                        loss = chunked_ce(model, h[keep], y[keep])
+                    opt.zero_grad(set_to_none=True)
+                    loss.backward()
+                    break
+                except (torch.OutOfMemoryError, torch.AcceleratorError) as e:
+                    # Another process (a game, the desktop) took VRAM: wait and retry the same batch.
+                    print(f"step {step}: GPU memory error ({type(e).__name__}), retry {attempt + 1}", flush=True)
+                    opt.zero_grad(set_to_none=True)
+                    h = loss = None
+                    torch.cuda.empty_cache()
+                    time.sleep(30)
+            else:
+                raise RuntimeError("GPU memory errors persist")
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             sched.step()
             step += 1
+            if step % a.save_every == 0:
+                torch.save({"state": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+                            "step": step, "ep": ep, "i": i + a.bs, "log": log, "best": best}, last)
             run += loss.item()
             every = 20 if a.max_steps else 200
             if step % every == 0:
