@@ -12,7 +12,7 @@ from .model import append, make_batch
 from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
-REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc")
+REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo")
 
 
 def base_lp_by_length(seq, train_end: int) -> np.ndarray:
@@ -35,6 +35,9 @@ class Scorer:
         self.dev = device
         self.tlen = torch.from_numpy(seq.items["track_len"]).to(device)
         self.base = torch.from_numpy(base_lp_by_length(seq, train_end)).to(device)
+        # placebo: a fixed random "reward" per track with the spread of the RM's lp (no signal about users)
+        g = torch.Generator().manual_seed(12345)
+        self.rand = (0.68 + 0.15 * torch.randn(seq.n_tok, generator=g)).clamp(0, 1).to(device)
 
     def side(self, user_ctx: list[tuple[int, int]], cands: np.ndarray) -> torch.Tensor:
         return torch.from_numpy(side_features(self.seq.items, cands, self.counts(user_ctx, cands))).to(self.dev)
@@ -62,6 +65,8 @@ class Scorer:
             return ratio * self.tlen[cands] / 200.0
         if kind == "mix":
             return lp + 0.5 * like - 0.5 * skip
+        if kind == "placebo":
+            return self.rand[cands]
         if kind == "disc":
             # long-term proxy: dosage of new artists the user will look up on their own within a week,
             # plus the usual Listen+ so the list stays listenable
