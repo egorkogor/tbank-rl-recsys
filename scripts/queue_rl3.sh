@@ -16,6 +16,10 @@ run add_b0.5_T1 --reward add --beta 0.5
 run add_b0.1_T1 --reward add --beta 0.1
 run spotify_b0.1_T5 --reward spotify --beta 0.1 --T 5 --bs 32 --steps 200
 # owner's balanced minutes B = (sum_k sqrt(s*_k M_k))^2 over old / new track of a known artist / new artist
-run balanced_b0.5_T1 --reward balanced --beta 0.5
-run balanced_b0.1_T1 --reward balanced --beta 0.1
-run balanced_b0.02_T1 --reward balanced --beta 0.02
+# rewards in minutes have a ~10x larger spread across tracks than probabilities: minutes at beta 0.5 collapsed
+# into 14-minute tracks (KL 8.8), so the minute-scale rewards get beta 2 / 5 / 20
+run balanced_b20_T1 --reward balanced --beta 20
+run balanced_b5_T1 --reward balanced --beta 5
+run balanced_b2_T1 --reward balanced --beta 2
+run minutes_b20_T1 --reward minutes --beta 20
+run minutes_b5_T1 --reward minutes --beta 5
