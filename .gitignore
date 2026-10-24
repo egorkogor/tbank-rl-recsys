@@ -1,0 +1,12 @@
+data/
+artifacts/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+logs/*
+!logs/codex/
+logs/codex/*
+!logs/codex/*_prompt.md
+!logs/codex/*_report.md
+src/*.egg-info/

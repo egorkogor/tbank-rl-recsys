@@ -1,0 +1,32 @@
+[project]
+name = "rlrec"
+version = "0.1.0"
+description = "RL fine-tuning of a GPT-2 next-item recommender against a learned reward model on Yambda-50M"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "polars>=1.30",
+  "pyarrow>=18",
+  "numpy>=2.0",
+  "scipy>=1.14",
+  "torch>=2.5",
+  "transformers>=4.45",
+  "matplotlib>=3.9",
+  "huggingface_hub>=0.25",
+  "pytest>=8",
+  "psutil>=6",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
