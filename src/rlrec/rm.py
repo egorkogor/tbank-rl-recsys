@@ -89,6 +89,7 @@ class HistoryCounts:
     def __init__(self, seq):
         self.seq = seq
         self.art = seq.items["artist"]
+        self._cache: dict = {}
 
     def __call__(self, ud_ctx: list[tuple[int, int]], cands: np.ndarray) -> dict:
         """ud_ctx[r] = (user_start, ctx_end); cands [R, C] tokens -> {key: counts [R, C]}."""
@@ -97,15 +98,30 @@ class HistoryCounts:
         for r, (s, e) in enumerate(ud_ctx):
             if e <= s:
                 continue
-            ht, ha, hp = np.asarray(tok[s:e]), np.asarray(artist[s:e]), np.asarray(pr[s:e])
+            tabs = self._tables(s, e, tok, artist, pr)
             aa = self.art[cands[r]]
-            lp, sk = hp >= 50, hp < 10
-            out["rep_item"][r] = _count_of(ht, cands[r])
-            out["rep_lp"][r] = _count_of(ht[lp], cands[r])
-            out["rep_skip"][r] = _count_of(ht[sk], cands[r])
-            out["rep_artist"][r] = _count_of(ha, aa)
-            out["rep_artist_lp"][r] = _count_of(ha[lp], aa)
+            for k, (u, c) in tabs.items():
+                q = aa if "artist" in k else cands[r]
+                if len(u) == 0:
+                    continue
+                pos = np.searchsorted(u, q).clip(0, len(u) - 1)
+                out[k][r] = np.where(u[pos] == q, c[pos], 0)
         return out
+
+    def _tables(self, s, e, tok, artist, pr) -> dict:
+        """Sorted value / count tables of a history slice; cached (evaluation scores many lists per context)."""
+        key = (s, e)
+        t = self._cache.get(key)
+        if t is None:
+            ht, ha, hp = np.asarray(tok[s:e]), np.asarray(artist[s:e]), np.asarray(pr[s:e])
+            lp, sk = hp >= 50, hp < 10
+            u = lambda v: np.unique(v, return_counts=True)  # noqa: E731
+            t = {"rep_item": u(ht), "rep_lp": u(ht[lp]), "rep_skip": u(ht[sk]), "rep_artist": u(ha),
+                 "rep_artist_lp": u(ha[lp])}
+            if len(self._cache) > 3_000:  # a full cache would take GBs of RAM (64k RL states, 31k user-days)
+                self._cache.clear()
+            self._cache[key] = t
+        return t
 
 
 def load_rm(path, device) -> RewardModel:

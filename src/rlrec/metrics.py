@@ -13,9 +13,17 @@ def _dcg_weights(k: int) -> np.ndarray:
     return 1.0 / np.log2(np.arange(2, k + 2))
 
 
+_HIST: dict = {}
+
+
 def history(seq, ud_idx: int) -> np.ndarray:
-    u, e = seq.ud["u"][ud_idx], seq.ud["ctx_end"][ud_idx]
-    return np.asarray(seq.tok[seq.ptr[u]:e])
+    """Distinct tokens the user listened to before the day (sorted); cached per user-day across specs."""
+    h = _HIST.get(int(ud_idx))
+    if h is None:
+        u, e = seq.ud["u"][ud_idx], seq.ud["ctx_end"][ud_idx]
+        h = np.unique(np.asarray(seq.tok[seq.ptr[u]:e]))
+        _HIST[int(ud_idx)] = h
+    return h
 
 
 def relevance(seq, uds: np.ndarray, topk: np.ndarray) -> dict[str, np.ndarray]:
@@ -27,7 +35,7 @@ def relevance(seq, uds: np.ndarray, topk: np.ndarray) -> dict[str, np.ndarray]:
         tg = seq.targets(i)
         n_all = int(seq.ud["n_tgt"][i])
         hist = history(seq, i)
-        new = tg[~np.isin(tg, hist)]
+        new = tg[~np.isin(tg, hist, assume_unique=False)]
         for suffix, t, n_t in (("", tg, n_all), ("_new", new, len(new))):
             if n_t == 0:
                 continue
