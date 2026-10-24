@@ -62,8 +62,21 @@ def main():
                 "adopted_artists": np.bincount(uu, weights=(adopt[mask] == 1), minlength=nu)}
 
     cur, prev = weekly(m), weekly(mp)
+    # balanced minutes B = (sum_k sqrt(s*_k M_k))^2, s* = train mix (owner's north star, 24.10)
+    from rlrec.config import TRAIN_END
+    from rlrec.rl import event_category
+    cat_ev = event_category(np.asarray(seq.rep_item), np.asarray(seq.rep_artist))
+    tr = day < TRAIN_END
+    s_star = np.bincount(cat_ev[tr], weights=mins_ev[tr], minlength=3) / mins_ev[tr].sum()
+    for d_, mask in ((cur, m), (prev, mp)):
+        Mk = np.stack([np.bincount(uidx[mask], weights=mins_ev[mask] * (cat_ev[mask] == k), minlength=nu)
+                       for k in range(3)], 1)
+        d_["balanced"] = (np.sqrt(s_star[None] * Mk).sum(1)) ** 2
+        d_["balance_coef"] = np.where(Mk.sum(1) > 0, d_["balanced"] / np.maximum(Mk.sum(1), 1e-9), np.nan)
     out = {"users_active_week": int(act.sum())}
-    for name in ("minutes", "sessions", "adopted_artists"):
+    out["balanced_s_star"] = s_star.round(4).tolist()
+    out["balance_coef_mean"] = float(np.nanmean(cur["balance_coef"][act]))
+    for name in ("balanced", "minutes", "sessions", "adopted_artists"):
         x, xp = cur[name][act], prev[name][act]
         rho = float(np.corrcoef(x, xp)[0, 1])
         out[f"{name}_per_user_week"] = {
