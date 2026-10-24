@@ -62,6 +62,7 @@ def main():
     ap.add_argument("--rm", default="rm_m0")
     ap.add_argument("--tag", default="")
     ap.add_argument("--vsub-users", type=int, default=1000)
+    ap.add_argument("--seq-chunk", type=int, default=4, help="states per gradient-accumulation chunk at T > 1")
     a = ap.parse_args()
 
     name = a.tag or f"{a.reward}_b{a.beta:g}_T{a.T}"
@@ -91,12 +92,21 @@ def main():
         idx = rng.choice(len(states), a.bs, replace=False)
         c = [ctx[i] for i in idx]
         b = make_batch(seq, c, a.len, dev)
+        opt.zero_grad(set_to_none=True)
         if a.T == 1:
             res = step_t1(policy, ref, rm, scorer, b, c, a.reward, a.beta, a.G)
+            res["loss"].backward()
         else:
-            res = step_seq(policy, ref, rm, scorer, b, c, a.reward, a.beta, a.G, a.T)
-        opt.zero_grad(set_to_none=True)
-        res["loss"].backward()
+            # T > 1: rollouts of G x T tokens per state do not fit at once -> gradient accumulation over
+            # chunks of whole states (each state's G samples stay together, so the RLOO baseline is unchanged)
+            parts = []
+            chunks = [list(range(i, min(i + a.seq_chunk, a.bs))) for i in range(0, a.bs, a.seq_chunk)]
+            for ch in chunks:
+                bc = {k: v[ch] for k, v in b.items()}
+                r_ = step_seq(policy, ref, rm, scorer, bc, [c[i] for i in ch], a.reward, a.beta, a.G, a.T)
+                (r_["loss"] * len(ch) / a.bs).backward()
+                parts.append({k: float(v) * len(ch) / a.bs for k, v in r_.items()})
+            res = {k: sum(p_[k] for p_ in parts) for k in parts[0]}
         torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
         opt.step()
         run.append({k: float(v) for k, v in res.items()})
