@@ -37,18 +37,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("specs", nargs="+")
     ap.add_argument("--model", default="b0")
+    ap.add_argument("--stage", default="val", choices=["val", "oot"],
+                    help="val: task 1's model_val.txt (trained on days 273-286); oot: model_oot.txt (280-293)")
     ap.add_argument("--users", type=int, default=1000, help="val users sampled (all their days)")
     ap.add_argument("--k", type=int, default=10)
     a = ap.parse_args()
     t0 = time.time()
     seq = Seq()
-    d = RUNS / "eval" / "val"
+    d = RUNS / "eval" / a.stage
     first = np.load(d / f"{a.specs[0].replace(':', '__')}.npz")
     uds = first["uds"]
     users = np.unique(seq.ud["u"][uds])
     pick = np.random.default_rng(SEED).choice(users, size=min(a.users, len(users)), replace=False)
     keep = np.isin(seq.ud["u"][uds], pick)
-    booster = lgb.Booster(model_file=str(TASK1 / "artifacts" / "runs" / a.model / "model_val.txt"))
+    booster = lgb.Booster(model_file=str(TASK1 / "artifacts" / "runs" / a.model / f"model_{a.stage}.txt"))
     want = booster.feature_name()
     ev = load_events()
     album = ev.filter(pl.col("kind") == 0).group_by("item").agg(pl.col("album").first())
