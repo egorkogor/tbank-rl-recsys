@@ -44,7 +44,7 @@ def main():
                            cwd=Path(__file__).parent).stdout.strip()
     if dirty:
         sys.exit("commit src/ and scripts/ before freezing:\n" + dirty)
-    files = [CKPT / "sft.pt"] + [CKPT / f"rm_m{m}.pt" for m in range(4)]
+    files = [CKPT / "sft.pt", CKPT / "sft_nocopy_s6000.pt"] + sorted(CKPT.glob("rm_m*.pt"))
     for s in a.specs:
         files += ckpt_of(s)
     rec = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "commit": commit, "specs": a.specs, "rule": a.rule,
