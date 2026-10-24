@@ -133,7 +133,7 @@ python eval_multistep.py sft rl:lp_b0.1_T1:400
 python compare.py --kind lp
 ```
 
-Процессы ограничены 6 потоками на логических ядрах 0–5 (`src/rlrec/__init__.py`).
+Процессы ограничены 3 потоками на логических ядрах 0–2 (`src/rlrec/__init__.py`).
 
 ## 12. Источники
 
