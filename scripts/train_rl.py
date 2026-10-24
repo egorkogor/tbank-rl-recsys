@@ -20,7 +20,7 @@ from rlrec.config import CKPT, DEVICE, RL_DAYS, RUNS, SEED, TRAIN_END  # noqa: E
 from rlrec.data import Seq  # noqa: E402
 from rlrec.evaluate import contexts, recommend, reward_of_lists  # noqa: E402
 from rlrec.metrics import relevance  # noqa: E402
-from rlrec.model import load_policy, make_batch, save  # noqa: E402
+from rlrec.model import limit_gpu, load_policy, make_batch, save  # noqa: E402
 from rlrec.rl import REWARDS, Scorer, exact_kl, step_seq, step_t1  # noqa: E402
 from rlrec.rm import load_rm  # noqa: E402
 from train_sft import val_subset  # noqa: E402
@@ -70,6 +70,7 @@ def main():
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     policy = load_policy(CKPT / "sft.pt", dev)
     ref = load_policy(CKPT / "sft.pt", dev)

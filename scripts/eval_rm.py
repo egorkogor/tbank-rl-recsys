@@ -16,7 +16,7 @@ from scipy.stats import rankdata  # noqa: E402
 
 from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, TRAIN_END, VAL_DAYS  # noqa: E402
 from rlrec.data import Seq, label_valid_eval  # noqa: E402
-from rlrec.model import make_batch  # noqa: E402
+from rlrec.model import limit_gpu, make_batch  # noqa: E402
 from rlrec.rm import HEADS, load_rm, side_features  # noqa: E402
 
 
@@ -115,6 +115,7 @@ def main():
         sys.exit("OOT needs artifacts/freeze.json")
     days = VAL_DAYS if a.stage == "val" else OOT_DAYS
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     members = [int(x) for x in a.members.split(",")]
     rms = [load_rm(CKPT / f"rm_m{m}.pt", dev) for m in members]

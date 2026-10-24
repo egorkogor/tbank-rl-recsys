@@ -19,7 +19,7 @@ from rlrec.config import CKPT, DEVICE, N_SPECIAL, SEED, TRAIN_END, VAL_DAYS  # n
 from rlrec.data import Seq  # noqa: E402
 from rlrec.evaluate import recommend  # noqa: E402
 from rlrec.metrics import relevance  # noqa: E402
-from rlrec.model import Policy, chunked_ce, make_batch, save  # noqa: E402
+from rlrec.model import limit_gpu, Policy, chunked_ce, make_batch, save  # noqa: E402
 
 MIN_CTX = 32
 
@@ -69,6 +69,7 @@ def main():
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     ends = train_ends(seq)
     vsub = val_subset(seq, 1000, SEED)
@@ -107,7 +108,9 @@ def main():
             run += loss.item()
             every = 20 if a.max_steps else 200
             if step % every == 0:
-                print(f"ep {ep} step {step}/{total} loss {run / every:.4f} {time.time() - t0:.0f}s", flush=True)
+                mem = torch.cuda.max_memory_reserved() / 2**30 if dev.type == "cuda" else 0.0
+                print(f"ep {ep} step {step}/{total} loss {run / every:.4f} {time.time() - t0:.0f}s gpu {mem:.2f}G",
+                      flush=True)
                 run = 0.0
             if a.max_steps and step >= a.max_steps:
                 break

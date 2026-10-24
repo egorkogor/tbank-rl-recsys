@@ -53,7 +53,7 @@ def _ce_chunk(h, w, bias, y):
     return F.cross_entropy(h @ w.T + bias, y, reduction="sum").float()
 
 
-def chunked_ce(model: Policy, h: torch.Tensor, y: torch.Tensor, chunk: int = 4096) -> torch.Tensor:
+def chunked_ce(model: Policy, h: torch.Tensor, y: torch.Tensor, chunk: int = 2048) -> torch.Tensor:
     """Mean next-track cross-entropy over the full vocabulary, logits recomputed in backward per chunk."""
     total = h.new_zeros((), dtype=torch.float32)
     for i in range(0, h.shape[0], chunk):
@@ -101,6 +101,15 @@ def append(b: dict, tok: torch.Tensor, outcome: torch.Tensor | None = None) -> d
     new["gi"] = torch.cat([b["gi"], col(-1)], 1)
     new["mask"] = torch.cat([b["mask"], torch.ones((B, 1), dtype=torch.bool, device=tok.device)], 1)
     return new
+
+
+def limit_gpu(device) -> None:
+    """Cap this process's share of VRAM. On Windows an over-full GPU silently spills into system RAM
+    (WDDM shared memory) and runs ~6x slower; with the cap the process fails loudly instead.
+    Desktop apps hold ~2.6 GB of the 8 GB here. Override with RLREC_GPU_FRACTION."""
+    import os
+    if torch.device(device).type == "cuda":
+        torch.cuda.set_per_process_memory_fraction(float(os.environ.get("RLREC_GPU_FRACTION", "0.6")))
 
 
 def save(model: nn.Module, path, **extra) -> None:

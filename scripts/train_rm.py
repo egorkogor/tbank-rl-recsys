@@ -17,7 +17,7 @@ import torch  # noqa: E402
 
 from rlrec.config import CKPT, DEVICE, N_SPECIAL, SEED  # noqa: E402
 from rlrec.data import Seq, rm_train_mask  # noqa: E402
-from rlrec.model import make_batch, save  # noqa: E402
+from rlrec.model import limit_gpu, make_batch, save  # noqa: E402
 from rlrec.rm import HEADS, RewardModel, loss_fn, side_features  # noqa: E402
 from train_sft import train_ends, windows  # noqa: E402
 
@@ -55,6 +55,7 @@ def main():
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     ok = rm_train_mask(seq)
     ends = train_ends(seq)

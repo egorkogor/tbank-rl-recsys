@@ -26,7 +26,7 @@ from rlrec.config import ART, CKPT, DAY, DEVICE, N_SPECIAL, OOT_DAYS, RUNS, TRAI
 from rlrec.data import Seq  # noqa: E402
 from rlrec.evaluate import contexts, recommend, reward_of_lists  # noqa: E402
 from rlrec.metrics import behaviour, relevance, user_bootstrap  # noqa: E402
-from rlrec.model import load_policy, make_batch  # noqa: E402
+from rlrec.model import limit_gpu, load_policy, make_batch  # noqa: E402
 from rlrec.rl import REWARDS, Scorer  # noqa: E402
 from rlrec.rm import load_rm  # noqa: E402
 
@@ -103,6 +103,7 @@ def main():
         sys.exit("OOT needs artifacts/freeze.json")
     days = VAL_DAYS if a.stage == "val" else OOT_DAYS
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     uds = seq.userdays(days)
     if a.subset:
@@ -114,6 +115,10 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     users = seq.ud["u"][uds]
     for spec in a.specs:
+        fn = spec.replace(":", "__")
+        if a.stage == "oot" and (outdir / f"{fn}.json").exists():
+            print(f"{spec}: OOT result exists, not overwritten")
+            continue
         topk = topk_for(spec, seq, uds, dev, ref, rms[0], scorer)
         rel = relevance(seq, uds, topk)
         rw = reward_of_lists(rms, scorer, seq, uds, topk[:, :10], dev, kinds=REWARDS)
@@ -125,7 +130,6 @@ def main():
                 "r_judge": {k: float(v[1:].mean()) for k, v in rw.items()},
                 "ensemble_std_lp": float(lp_items.std(0).mean()),
                 "behaviour": beh}
-        fn = spec.replace(":", "__")
         np.savez_compressed(outdir / f"{fn}.npz", uds=uds, topk=topk.astype(np.int32),
                             **{f"rel_{k}": v for k, v in rel.items()},
                             **{f"rw_{k}": v for k, v in rw.items()}, lp_std=lp_items.std(0).mean(1))

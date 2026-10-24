@@ -20,7 +20,7 @@ import torch  # noqa: E402
 from rlrec.config import CKPT, DEVICE, LISTEN_PLUS, PARTIAL, RUNS, SKIP, TRAIN_END, VAL_DAYS  # noqa: E402
 from rlrec.data import Seq  # noqa: E402
 from rlrec.evaluate import contexts  # noqa: E402
-from rlrec.model import append, load_policy, make_batch  # noqa: E402
+from rlrec.model import limit_gpu, append, load_policy, make_batch  # noqa: E402
 from rlrec.rl import Scorer  # noqa: E402
 from rlrec.rm import load_rm  # noqa: E402
 
@@ -87,6 +87,7 @@ def main():
     ap.add_argument("--n", type=int, default=4000)
     a = ap.parse_args()
     dev = torch.device(DEVICE)
+    limit_gpu(dev)
     seq = Seq()
     uds = seq.userdays(VAL_DAYS)
     uds = np.sort(np.random.default_rng(0).choice(uds, size=min(a.n, len(uds)), replace=False))
