@@ -13,7 +13,7 @@ from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
 REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip", "wtg", "add", "spotify",
-           "balanced", "mlp")
+           "balanced", "mlp", "quant")
 # Balanced minutes (owner's metric, 24.10, revised): B = T * K(s), T = old + new minutes of the week,
 # s = new / T, new = tracks the user had not heard (any artist). BC(s) = sqrt(s s*) + sqrt((1-s)(1-s*));
 # K = BC^2 below the target share s*, K = 1 - KAPPA (1 - BC^2) above it (too much new costs 4x less than
@@ -71,13 +71,22 @@ def label_stats(seq, train_end: int, n_buckets: int = 20) -> dict:
     mu = np.bincount(bk, weights=sec, minlength=n_buckets) / np.maximum(cnt, 1)
     sd = np.sqrt(np.bincount(bk, weights=sec ** 2, minlength=n_buckets) / np.maximum(cnt, 1) - mu ** 2)
     tb = np.searchsorted(edges, tlen)
+    # quantile grid per length bucket of the TRACK-level mean listened ratio (>= 5 train listens):
+    # single listens pile up at ratio 1.0 (over half are complete), track means are continuous
+    ratio_obs = np.clip(pr[tr], 0, 100) / 100
+    n_t = np.bincount(tok[tr], minlength=len(tlen))
+    m_t = np.bincount(tok[tr], weights=ratio_obs, minlength=len(tlen)) / np.maximum(n_t, 1)
+    ok_t = n_t >= 5
+    tb_all = np.searchsorted(edges, tlen)
+    qgrid = np.stack([np.quantile(m_t[ok_t & (tb_all == b)], np.linspace(0, 1, 101)) if (ok_t & (tb_all == b)).any()
+                      else np.linspace(0, 1, 101) for b in range(n_buckets)]).astype(np.float32)
     pop = seq.items["log_pop"]
     # reference mix of minutes over all train listens: old / new track of a known artist / new artist
     trall = day < train_end
     mins = np.clip(pr[trall], 0, 100) / 100 * tlen[tok[trall]] / 60
     cat = event_category(np.asarray(seq.rep_item)[trall], np.asarray(seq.rep_artist)[trall])
     share = np.bincount(cat, weights=mins, minlength=3) / mins.sum()
-    return {"bal_share": share.astype(np.float32), "bal_s_new": float(share[1:].sum()), "wtg_mu": mu[tb].astype(np.float32), "wtg_sd": np.maximum(sd[tb], 1.0).astype(np.float32),
+    return {"qgrid": qgrid, "qbucket": tb.astype(np.int64), "bal_share": share.astype(np.float32), "bal_s_new": float(share[1:].sum()), "wtg_mu": mu[tb].astype(np.float32), "wtg_sd": np.maximum(sd[tb], 1.0).astype(np.float32),
             "min_mu": float((sec / 60).mean()), "min_sd": float((sec / 60).std()),
             "like_mu": float(like[tr].mean()), "like_sd": float(like[tr].std()),
             "skip_mu": float((pr[tr] < 10).mean()), "skip_sd": float((pr[tr] < 10).std()),
@@ -184,6 +193,12 @@ class Scorer:
                     + 0.25 * (like - st["like_mu"]) / st["like_sd"] - 0.25 * (skip - st["skip_mu"]) / st["skip_sd"])
         if kind == "spotify":
             return self.spotify(skip, cands, side, None)
+        if kind == "quant":
+            # D2Q-style (Zhan et al. KDD'22, adapted): percentile of the predicted listened ratio among the
+            # track-level mean ratios of tracks of the same length -> in [0, 1], neutral to the track length
+            grid = self.st["qgrid"][self.st["qbucket"][cands]]  # [..., 101]
+            below = (grid <= ratio[..., None]).float().sum(-1)
+            return ((below - 1).clamp(min=0) / 100.0).clamp(0, 1)
         if kind == "mlp":
             # owner's idea: minutes plus a bonus for a completed (Listen+) track, both standardised on the train
             # labels so that neither part needs a hand-picked minutes-per-completion exchange rate

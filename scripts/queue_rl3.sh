@@ -26,3 +26,6 @@ run minutes_b5_T1 --reward minutes --beta 5
 # owner's idea: minutes + completion bonus (standardised, equal weights)
 run mlp_b0.5_T1 --reward mlp --beta 0.5
 run mlp_b0.1_T1 --reward mlp --beta 0.1
+# duration-neutral alternative to WTG: per-length quantile of the predicted listened ratio (D2Q-style)
+run quant_b0.5_T1 --reward quant --beta 0.5
+run quant_b0.1_T1 --reward quant --beta 0.1
