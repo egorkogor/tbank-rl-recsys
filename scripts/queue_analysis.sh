@@ -7,7 +7,7 @@ PY1=D:/PdM_Projects/tbank-recsys-autofeatures/.venv/Scripts/python.exe   # has l
 while [ ! -f ../logs/queue_evals.done ]; do sleep 60; done
 L=../logs/analysis.log
 $PY select_point.py >> $L 2>&1
-for k in lp minutes balanced skip wtg; do $PY compare.py --kind $k >> $L 2>&1; done
+for k in lp minutes balanced skip wtg quant; do $PY compare.py --kind $k >> $L 2>&1; done
 specs=$(ls ../artifacts/runs/eval/val/ | grep -E '^(rl|pistar|copyscale|personal|mostpop)__.*\.npz$' | sed 's/\.npz$//; s/__/:/g')
 $PY decompose.py $specs >> $L 2>&1
 t1=$(ls -d ../artifacts/runs/rl/*_T1/ | xargs -n1 basename | grep -v -E '^(calib|smoke)' | sed 's/$/:400/')
