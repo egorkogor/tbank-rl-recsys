@@ -93,8 +93,13 @@ def main():
                     opt.zero_grad(set_to_none=True)
                     loss.backward()
                     break
-                except (torch.OutOfMemoryError, torch.AcceleratorError) as e:
-                    # Another process took VRAM: wait and retry the same batch.
+                except torch.AcceleratorError:
+                    # A driver-level CUDA error leaves the context unusable: exit, the wrapper resumes
+                    # from the last checkpoint in a fresh process.
+                    print(f"step {step}: CUDA error, exiting for a restart from the checkpoint", flush=True)
+                    sys.exit(3)
+                except torch.OutOfMemoryError as e:
+                    # Another process (a game, the desktop) took VRAM: wait and retry the same batch.
                     print(f"step {step}: GPU memory error ({type(e).__name__}), retry {attempt + 1}", flush=True)
                     opt.zero_grad(set_to_none=True)
                     h = logits = loss = None

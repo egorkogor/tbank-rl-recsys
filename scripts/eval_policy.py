@@ -3,6 +3,7 @@
 Specs:
   sft                      the SFT policy (with the repeat channel)
   ckpt:<file>              any policy checkpoint in CKPT (e.g. the ablation without the repeat channel)
+  copyscale:<f>            SFT with the repeat-channel weights times f (no-RL baseline tuned on val)
   rl:<run>:<step>          checkpoint of an RL run (artifacts/runs/rl/<run>/step<step>.pt)
   pistar:<reward>:<beta>   closed-form optimum of the T = 1 objective on the SFT top-1000:
                            score = log pi_ref + r_train / beta (beta = 0: reward only)
@@ -85,6 +86,12 @@ def topk_for(spec, seq, uds, dev, ref, rm0, scorer):
     if spec in ("mostpop", "personal"):
         return mostpop_topk(seq, uds, personal=spec == "personal")
     kind, *rest = spec.split(":")
+    if kind == "copyscale":
+        # no-RL baseline for the day-level metric: SFT with its repeat-channel weights multiplied by f
+        pol = load_policy(CKPT / "sft.pt", dev)
+        with torch.no_grad():
+            pol.copy_w.mul_(float(rest[0]))
+        return recommend(pol, seq, uds, dev)
     if kind == "ckpt":
         return recommend(load_policy(CKPT / rest[0], dev), seq, uds, dev)
     if kind == "rl":
