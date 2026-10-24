@@ -84,12 +84,24 @@ def main():
             if valid.sum() == 0:
                 continue
             inp = {k: v[:, :-1] for k, v in b.items()}
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                h = rm.hidden(inp)[valid]
-                logits = rm.head(h, cand, side)
-            loss, parts = loss_fn(logits, y)
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
+            for attempt in range(6):
+                try:
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        h = rm.hidden(inp)[valid]
+                        logits = rm.head(h, cand, side)
+                    loss, parts = loss_fn(logits, y)
+                    opt.zero_grad(set_to_none=True)
+                    loss.backward()
+                    break
+                except (torch.OutOfMemoryError, torch.AcceleratorError) as e:
+                    # Another process took VRAM: wait and retry the same batch.
+                    print(f"step {step}: GPU memory error ({type(e).__name__}), retry {attempt + 1}", flush=True)
+                    opt.zero_grad(set_to_none=True)
+                    h = logits = loss = None
+                    torch.cuda.empty_cache()
+                    time.sleep(30)
+            else:
+                raise RuntimeError("GPU memory errors persist")
             torch.nn.utils.clip_grad_norm_(rm.parameters(), 1.0)
             opt.step()
             sched.step()
