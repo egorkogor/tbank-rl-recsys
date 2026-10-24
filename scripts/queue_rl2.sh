@@ -14,7 +14,7 @@ run() {
 run minutes_b0.5_T1 --reward minutes --beta 0.5
 run minutes_b0.1_T1 --reward minutes --beta 0.1
 run minutes_b0.02_T1 --reward minutes --beta 0.02
-run minutes_b0.1_T5 --reward minutes --beta 0.1 --T 5 --bs 32
+run minutes_b5_T5 --reward minutes --beta 5 --T 5 --bs 32
 # rewards from the literature search, if a queue for them was written meanwhile
 [ -f queue_rl3.sh ] && bash queue_rl3.sh
 echo done > ../logs/queue_rl2.done
