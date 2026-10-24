@@ -192,7 +192,8 @@ def main():
                                   "skip": auc(y["skip"], -s)}
     if len(members) > 1:
         res["ensemble_std_lp_mean"] = float(np.std([p[:, 1] for p in sc["pred"]], 0).mean())
-    out = RUNS / f"rm_eval_{a.stage}{'_snapshot' if a.snapshot else ''}.json"
+    tag = "" if a.members == "0,1,2,3" else "_m" + a.members.replace(",", "")
+    out = RUNS / f"rm_eval_{a.stage}{'_snapshot' if a.snapshot else ''}{tag}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1))
     print(json.dumps({k: v for k, v in res.items()}, indent=1)[:4000])
