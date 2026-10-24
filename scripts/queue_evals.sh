@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# After the RL grid, one GPU process at a time: snapshot judges, then evaluations (baselines, pi*, every RL run).
+# After all RL queues, one GPU process at a time: snapshot judges m4-m6, then the full val evaluation.
+# Specs run in batches (one process per batch shares the per-user-day history cache); done specs are skipped.
 cd "$(dirname "$0")"
 PY=../.venv/Scripts/python.exe
 while [ ! -f ../logs/queue_rl.done ] || [ ! -f ../logs/queue_rl2.done ]; do sleep 30; done
-# snapshot-trained judges m4-m6, sequentially (RAM fits one GPU process next to task 1)
 [ -f ../logs/queue_snapjudges.done ] || bash queue_snapjudges.sh
-[ -f ../artifacts/runs/rm_eval_val_snapshot.json ] || $PY eval_rm.py --stage val --snapshot > ../logs/rm_eval_val_snapshot.log 2>&1
-ev() { [ -f ../artifacts/runs/eval/val/$(echo "$1" | sed 's/:/__/g').json ] || $PY eval_policy.py "$@" >> ../logs/eval_val.log 2>&1; }
-for s in sft ckpt:sft_nocopy_s6000.pt mostpop personal copyscale:2 copyscale:4; do ev $s; done
-for r in lp ratio fair cont disc placebo; do for b in 0.02 0.1 0.5; do ev pistar:$r:$b; done; done
+specs="sft ckpt:sft_nocopy_s6000.pt mostpop personal copyscale:2 copyscale:4"
+for r in lp fair minutes wtg; do for b in 0.02 0.1 0.5; do specs="$specs pistar:$r:$b"; done; done
 for d in ../artifacts/runs/rl/*/; do
   run=$(basename $d)
   case $run in calib*|smoke*) continue;; esac
-  for st in 100 200 300 400; do [ -f $d/step$st.pt ] && ev rl:$run:$st; done
+  last=$(ls $d | grep -o 'step[0-9]*' | sed 's/step//' | sort -n | tail -1)
+  [ -n "$last" ] && specs="$specs rl:$run:$last"
+done
+for run in lp_b0.1_T1 lp_b0.02_T1; do for st in 100 200 300; do specs="$specs rl:$run:$st"; done; done
+todo=""
+for s in $specs; do [ -f ../artifacts/runs/eval/val/$(echo "$s" | sed 's/:/__/g').json ] || todo="$todo $s"; done
+echo "specs to evaluate: $(echo $todo | wc -w)" >> ../logs/eval_val.log
+set -- $todo
+while [ $# -gt 0 ]; do
+  batch=""; for i in 1 2 3 4 5 6 7 8; do [ $# -gt 0 ] && { batch="$batch $1"; shift; }; done
+  for try in 1 2; do $PY eval_policy.py $batch >> ../logs/eval_val.log 2>&1 && break; sleep 60; done
 done
 echo done > ../logs/queue_evals.done
