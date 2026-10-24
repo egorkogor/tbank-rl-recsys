@@ -56,7 +56,7 @@ def main():
     ap.add_argument("--G", type=int, default=8)
     ap.add_argument("--bs", type=int, default=64)
     ap.add_argument("--steps", type=int, default=400)
-    ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--eval-every", type=int, default=100)
     ap.add_argument("--len", type=int, default=256)
     ap.add_argument("--rm", default="rm_m0")

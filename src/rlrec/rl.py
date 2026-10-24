@@ -1,7 +1,7 @@
 """Rewards from RM heads, exact KL over the vocabulary, and one policy-gradient step for T = 1 and T > 1.
 
-Policy gradient: REINFORCE with a group baseline (G samples per state, advantage = R - group mean,
-scaled by the batch std; as in GRPO / RLOO, no value network), plus beta * exact KL(pi || pi_ref).
+Policy gradient: REINFORCE with a group baseline (G samples per state, leave-one-out advantage as in
+RLOO, no value network), plus beta * exact KL(pi || pi_ref).
 One gradient step per batch of fresh samples (strictly on-policy, so no PPO clipping).
 """
 import numpy as np
@@ -74,8 +74,11 @@ def exact_kl(logp: torch.Tensor, logp_ref: torch.Tensor) -> torch.Tensor:
 
 
 def _advantage(R: torch.Tensor) -> torch.Tensor:
-    A = R - R.mean(1, keepdim=True)
-    return A / (A.std() + 1e-6)
+    """Leave-one-out baseline (RLOO). No std scaling: the gradient stays an unbiased estimate of
+    grad E[r], so the stationary point of E[r] - beta * KL is pi* = pi_ref * exp(r / beta) / Z at T = 1
+    and RL at a given beta is comparable with the closed form at the same beta."""
+    G = R.shape[1]
+    return (R - R.mean(1, keepdim=True)) * G / (G - 1)
 
 
 def step_t1(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float, G: int) -> dict:
