@@ -67,7 +67,8 @@ def main():
     rm = RewardModel(seq.n_tok).to(dev)
     if a.init:
         ck = torch.load(CKPT / f"{a.init}.pt", map_location=dev, weights_only=False)
-        rm.body.load_state_dict(ck["state"])
+        # the RM backbone has no repeat channel (it gets repeat counts as side features)
+        rm.body.load_state_dict({k: v for k, v in ck["state"].items() if k != "copy_w"})
     opt = torch.optim.AdamW(rm.parameters(), lr=a.lr, weight_decay=0.01)
     n_win = len(windows(seq, ends_m, a.len, np.random.default_rng(0)))
     total = a.epochs * (n_win // a.bs)

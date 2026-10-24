@@ -123,12 +123,12 @@ def step_seq(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float
     pos = torch.arange(L - 1, L - 1 + T, device=acts.device)  # position predicting action t
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         hr = rm.hidden(full)[:, pos]  # RM state after the real context + generated prefix
-        logp_ref = F.log_softmax(ref.logits(ref.hidden(full)[:, pos]), -1)
+        logp_ref = F.log_softmax(ref.logits_pos(full, ref.hidden(full), pos.tolist()), -1)
     side = torch.stack([scorer.side(ctx_g, acts[:, t:t + 1].cpu().numpy())[:, 0] for t in range(T)], 1)
     p = scorer.probs(rm, hr, acts, side)
     r = scorer.reward(p, acts, kind)  # [R, T]
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        logp = F.log_softmax(policy.logits(policy.hidden(full)[:, pos]), -1)  # [R, T, V]
+        logp = F.log_softmax(policy.logits_pos(full, policy.hidden(full), pos.tolist()), -1)  # [R, T, V]
     lp_a = logp.gather(2, acts[:, :, None])[:, :, 0].sum(1)
     R = r.sum(1).view(B, G)
     A = _advantage(R).view(-1)

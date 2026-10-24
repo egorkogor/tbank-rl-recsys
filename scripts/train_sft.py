@@ -65,6 +65,9 @@ def main():
     ap.add_argument("--max-steps", type=int, default=0, help="debug: stop after n steps")
     ap.add_argument("--out", default="sft")
     ap.add_argument("--resume", action="store_true", help="continue from <out>_last.pt")
+    ap.add_argument("--init", default="", help="start from the weights of this checkpoint file name in CKPT")
+    ap.add_argument("--copy", action="store_true", help="add the repeat channel (RepeatNet-style copy logits)")
+    ap.add_argument("--copy-init", type=float, nargs=2, default=(4.0, 2.0))
     ap.add_argument("--save-every", type=int, default=1000)
     a = ap.parse_args()
 
@@ -75,13 +78,22 @@ def main():
     seq = Seq()
     ends = train_ends(seq)
     vsub = val_subset(seq, 1000, SEED)
-    model = Policy(seq.n_tok, d=a.d, n_layer=a.layers, n_head=4).to(dev)
+    model = Policy(seq.n_tok, d=a.d, n_layer=a.layers, n_head=4, copy=a.copy).to(dev)
+    if a.init:
+        st = torch.load(CKPT / a.init, map_location=dev, weights_only=False)["state"]
+        model.load_state_dict(st, strict=not (a.copy and "copy_w" not in st))
+        print(f"initialised from {a.init}", flush=True)
+    if a.copy and not (a.init and "copy_w" in st):
+        with torch.no_grad():
+            model.copy_w.copy_(torch.tensor(a.copy_init))
     decay = [p for n, p in model.named_parameters() if p.dim() >= 2 and "tok" not in n]
-    rest = [p for n, p in model.named_parameters() if not (p.dim() >= 2 and "tok" not in n)]
-    opt = torch.optim.AdamW([{"params": decay, "weight_decay": 0.01}, {"params": rest, "weight_decay": 0.0}],
-                            lr=a.lr, betas=(0.9, 0.98))
+    rest = [p for n, p in model.named_parameters() if not (p.dim() >= 2 and "tok" not in n) and n != "copy_w"]
+    groups = [{"params": decay, "weight_decay": 0.01}, {"params": rest, "weight_decay": 0.0}]
+    if a.copy:
+        groups.append({"params": [model.copy_w], "weight_decay": 0.0, "lr": 1e-2})
+    opt = torch.optim.AdamW(groups, lr=a.lr, betas=(0.9, 0.98))
     n_win = len(windows(seq, ends, a.len, np.random.default_rng(0)))
-    total = a.epochs * (n_win // a.bs)
+    total = a.max_steps or a.epochs * (n_win // a.bs)
     warm = 500
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1, (s + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / max(1, total)))))
@@ -101,7 +113,7 @@ def main():
         # Windows depend only on (seed, epoch), so a resumed run sees the same order.
         wins = windows(seq, ends, a.len, np.random.default_rng(SEED + ep))
         brng = np.random.default_rng(SEED + 100 + ep)
-        run = 0.0
+        run, n_run = 0.0, 0
         for i in range(0, len(wins) - a.bs + 1, a.bs):
             if ep == start_ep and i < start_i:
                 continue
@@ -115,7 +127,8 @@ def main():
                 try:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         h = model.hidden(inp)
-                        loss = chunked_ce(model, h[keep], y[keep])
+                        row, col = keep.nonzero(as_tuple=True)
+                        loss = chunked_ce(model, h[keep], y[keep], ctx=(inp["tok"], inp["mask"], row, col))
                     opt.zero_grad(set_to_none=True)
                     loss.backward()
                     break
@@ -136,12 +149,14 @@ def main():
                 torch.save({"state": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                             "step": step, "ep": ep, "i": i + a.bs, "log": log, "best": best}, last)
             run += loss.item()
-            every = 20 if a.max_steps else 200
+            n_run += 1
+            every = 20 if 0 < a.max_steps < 1000 else 200
             if step % every == 0:
                 mem = torch.cuda.max_memory_reserved() / 2**30 if dev.type == "cuda" else 0.0
-                print(f"ep {ep} step {step}/{total} loss {run / every:.4f} {time.time() - t0:.0f}s gpu {mem:.2f}G",
-                      flush=True)
-                run = 0.0
+                cw = " copy_w " + ",".join(f"{x:.2f}" for x in model.copy_w.tolist()) if a.copy else ""
+                print(f"ep {ep} step {step}/{total} loss {run / n_run:.4f} {time.time() - t0:.0f}s gpu {mem:.2f}G"
+                      + cw, flush=True)
+                run, n_run = 0.0, 0
             if a.max_steps and step >= a.max_steps:
                 break
         topk = recommend(model, seq, vsub, dev, a.len)

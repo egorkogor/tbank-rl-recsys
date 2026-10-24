@@ -1,7 +1,8 @@
 """Full evaluation of recommenders on every val (or OOT) user-day under one protocol.
 
 Specs:
-  sft                      the SFT policy
+  sft                      the SFT policy (with the repeat channel)
+  ckpt:<file>              any policy checkpoint in CKPT (e.g. the ablation without the repeat channel)
   rl:<run>:<step>          checkpoint of an RL run (artifacts/runs/rl/<run>/step<step>.pt)
   pistar:<reward>:<beta>   closed-form optimum of the T = 1 objective on the SFT top-1000:
                            score = log pi_ref + r_train / beta (beta = 0: reward only)
@@ -84,6 +85,8 @@ def topk_for(spec, seq, uds, dev, ref, rm0, scorer):
     if spec in ("mostpop", "personal"):
         return mostpop_topk(seq, uds, personal=spec == "personal")
     kind, *rest = spec.split(":")
+    if kind == "ckpt":
+        return recommend(load_policy(CKPT / rest[0], dev), seq, uds, dev)
     if kind == "rl":
         run, step = rest
         return recommend(load_policy(RUNS / "rl" / run / f"step{step}.pt", dev), seq, uds, dev)
