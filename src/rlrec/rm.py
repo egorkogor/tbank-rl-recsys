@@ -5,7 +5,9 @@ score = MLP([h_t, e_c, h_t * e_c, side_c]) -> heads. One pass over a window scor
 whose next event is algorithmic; h_t sees events <= t only.
 
 side_c (known before the candidate plays): log track length, log train popularity, prior listens of
-the track and of its artist by this user (whole history), new-artist flag.
+the track and of its artist by this user (whole history), new-artist and repeat flags, and the quality of
+that history (task 1: its strongest hand-made features): smoothed Listen+ and skip rates of the
+user x track pair and the Listen+ rate of the user x artist pair.
 """
 import numpy as np
 import torch
@@ -15,7 +17,9 @@ import torch.nn.functional as F
 from .model import Policy
 
 HEADS = ("ratio", "lp", "skip", "like", "cont")
-N_SIDE = 6
+N_SIDE = 9
+COUNT_KEYS = ("rep_item", "rep_artist", "rep_lp", "rep_skip", "rep_artist_lp")
+PRIOR_LP, PRIOR_SKIP, K_SMOOTH = 0.68, 0.22, 2.0
 
 
 class RewardModel(nn.Module):
@@ -38,10 +42,19 @@ class RewardModel(nn.Module):
         return self.body.hidden(b)
 
 
-def side_features(track_len: np.ndarray, log_pop: np.ndarray, rep_item: np.ndarray, rep_artist: np.ndarray):
-    return np.stack([np.log(np.clip(track_len, 10, 3600)) - 5.3, log_pop / 5 - 1, np.log1p(rep_item) / 3,
-                     np.log1p(rep_artist) / 4, (rep_artist == 0).astype(np.float32),
-                     (rep_item > 0).astype(np.float32)], -1).astype(np.float32)
+def side_features(items: dict, tok: np.ndarray, c: dict) -> np.ndarray:
+    """items = seq.items, tok = candidate tokens, c = prior counts (COUNT_KEYS) -> [..., N_SIDE]."""
+    ri, ra = c["rep_item"].astype(np.float32), c["rep_artist"].astype(np.float32)
+    return np.stack([np.log(np.clip(items["track_len"][tok], 10, 3600)) - 5.3, items["log_pop"][tok] / 5 - 1,
+                     np.log1p(ri) / 3, np.log1p(ra) / 4, (ra == 0).astype(np.float32), (ri > 0).astype(np.float32),
+                     (c["rep_lp"] + K_SMOOTH * PRIOR_LP) / (ri + K_SMOOTH) - PRIOR_LP,
+                     (c["rep_skip"] + K_SMOOTH * PRIOR_SKIP) / (ri + K_SMOOTH) - PRIOR_SKIP,
+                     (c["rep_artist_lp"] + K_SMOOTH * PRIOR_LP) / (ra + K_SMOOTH) - PRIOR_LP], -1).astype(np.float32)
+
+
+def logged_counts(seq, gi: np.ndarray) -> dict:
+    """Prior counts stored for logged listens (training and evaluation of the RM on the log)."""
+    return {k: np.asarray(getattr(seq, k))[gi] for k in COUNT_KEYS}
 
 
 def loss_fn(logits: torch.Tensor, y: dict) -> tuple[torch.Tensor, dict]:
@@ -53,30 +66,41 @@ def loss_fn(logits: torch.Tensor, y: dict) -> tuple[torch.Tensor, dict]:
     return sum(w[k] * v for k, v in parts.items()), {k: float(v.detach()) for k, v in parts.items()}
 
 
+def _count_of(values: np.ndarray, query: np.ndarray) -> np.ndarray:
+    if len(values) == 0:
+        return np.zeros(query.shape, np.int64)
+    u, c = np.unique(values, return_counts=True)
+    pos = np.searchsorted(u, query).clip(0, len(u) - 1)
+    return np.where(u[pos] == query, c[pos], 0)
+
+
 class HistoryCounts:
-    """Prior listens of arbitrary tracks / artists in a user's history before a context end."""
+    """Prior counts (COUNT_KEYS) of arbitrary candidate tracks in a user's history before a context end.
+
+    Same definitions as the logged columns (data.build / data.build_pair_stats): every prior listen of
+    the user, out-of-vocabulary tracks included.
+    """
 
     def __init__(self, seq):
         self.seq = seq
         self.art = seq.items["artist"]
 
-    def __call__(self, ud_ctx: list[tuple[int, int]], cands: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """ud_ctx[r] = (user_start, ctx_end); cands [R, C] tokens -> counts [R, C] for track and artist."""
-        ri = np.zeros(cands.shape, np.int64)
-        ra = np.zeros(cands.shape, np.int64)
-        tok, artist = self.seq.tok, self.seq.artist
+    def __call__(self, ud_ctx: list[tuple[int, int]], cands: np.ndarray) -> dict:
+        """ud_ctx[r] = (user_start, ctx_end); cands [R, C] tokens -> {key: counts [R, C]}."""
+        out = {k: np.zeros(cands.shape, np.int64) for k in COUNT_KEYS}
+        tok, artist, pr = self.seq.tok, self.seq.artist, self.seq.pr
         for r, (s, e) in enumerate(ud_ctx):
             if e <= s:
                 continue
-            # Same definition as seq.rep_item / seq.rep_artist: every prior listen, OOV tracks included.
-            ut, ct = np.unique(np.asarray(tok[s:e]), return_counts=True)
-            pos = np.searchsorted(ut, cands[r]).clip(0, len(ut) - 1)
-            ri[r] = np.where(ut[pos] == cands[r], ct[pos], 0)
-            ua, ca = np.unique(np.asarray(artist[s:e]), return_counts=True)
+            ht, ha, hp = np.asarray(tok[s:e]), np.asarray(artist[s:e]), np.asarray(pr[s:e])
             aa = self.art[cands[r]]
-            pos = np.searchsorted(ua, aa).clip(0, len(ua) - 1)
-            ra[r] = np.where(ua[pos] == aa, ca[pos], 0)
-        return ri, ra
+            lp, sk = hp >= 50, hp < 10
+            out["rep_item"][r] = _count_of(ht, cands[r])
+            out["rep_lp"][r] = _count_of(ht[lp], cands[r])
+            out["rep_skip"][r] = _count_of(ht[sk], cands[r])
+            out["rep_artist"][r] = _count_of(ha, aa)
+            out["rep_artist_lp"][r] = _count_of(ha[lp], aa)
+        return out
 
 
 def load_rm(path, device) -> RewardModel:

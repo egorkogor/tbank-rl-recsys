@@ -19,6 +19,8 @@ from .config import (CONT_GAP, DATA, GAP_EDGES, LIKE_HORIZON, LISTEN_PLUS, N_SPE
                      SKIP, T_END, TRAIN_END, UNK, VAL_DAYS, VOCAB, day_start)
 
 COLS = ["tok", "item", "artist", "t", "day", "org", "pr", "outcome", "gap", "rep_item", "rep_artist", "like", "cont"]
+# Prior Listen+ / skip listens of the same track and prior Listen+ of the same artist, per user (pair_stats).
+PAIR_COLS = ["rep_lp", "rep_skip", "rep_artist_lp"]
 
 
 def _outcome(pr: pl.Expr) -> pl.Expr:
@@ -85,6 +87,7 @@ def build() -> None:
     np.savez(SEQ / "items.npz", item_id=item_id, artist=artist, track_len=tlen, log_pop=pop)
 
     _user_days(lis, ptr)
+    build_pair_stats()
     meta = dict(n_listens=lis.height, n_users=users.height, vocab=int(n),
                 train_cov=float(vocab["len"].sum() / lis.filter(pl.col("day") < TRAIN_END).height))
     (SEQ / "meta.json").write_text(json.dumps(meta, indent=1))
@@ -115,11 +118,41 @@ def _user_days(lis: pl.DataFrame, ptr: np.ndarray) -> None:
              n_ctx=ud["n_ctx"].to_numpy(), n_tgt=ud["n_tgt"].to_numpy(), tgt_ptr=tptr, tgt=flat)
 
 
+def _prior_count(key: np.ndarray, ind: np.ndarray) -> np.ndarray:
+    """For time-ordered events: number of earlier events with the same key and ind = 1."""
+    order = np.argsort(key, kind="stable")
+    k, x = key[order], ind[order].astype(np.int64)
+    cs = np.cumsum(x) - x  # exclusive prefix sum in sorted order
+    start = np.r_[True, k[1:] != k[:-1]]
+    base = np.maximum.accumulate(np.where(start, cs, 0))
+    out = np.empty(len(key), np.int32)
+    out[order] = cs - base
+    return out
+
+
+def build_pair_stats(users_per_chunk: int = 1000) -> None:
+    """Pair-history quality (task 1: the strongest hand-made features) in user chunks to keep memory low."""
+    ptr = np.load(SEQ / "ptr.npy")
+    item, artist, pr = (np.load(SEQ / f"{c}.npy", mmap_mode="r") for c in ("item", "artist", "pr"))
+    out = {c: np.zeros(int(ptr[-1]), np.int32) for c in PAIR_COLS}
+    for u0 in range(0, len(ptr) - 1, users_per_chunk):
+        s, e = int(ptr[u0]), int(ptr[min(u0 + users_per_chunk, len(ptr) - 1)])
+        local = np.repeat(np.arange(min(users_per_chunk, len(ptr) - 1 - u0), dtype=np.int64), np.diff(ptr[u0:u0 + users_per_chunk + 1]))
+        p = np.asarray(pr[s:e])
+        ki = (local << 24) + np.asarray(item[s:e]).astype(np.int64)
+        ka = (local << 24) + np.asarray(artist[s:e]).astype(np.int64)
+        out["rep_lp"][s:e] = _prior_count(ki, p >= 50)
+        out["rep_skip"][s:e] = _prior_count(ki, p < 10)
+        out["rep_artist_lp"][s:e] = _prior_count(ka, p >= 50)
+    for c, v in out.items():
+        np.save(SEQ / f"{c}.npy", v)
+
+
 class Seq:
     """Memory-mapped view of artifacts/seq/."""
 
     def __init__(self):
-        for c in COLS + ["ptr", "uid"]:
+        for c in COLS + PAIR_COLS + ["ptr", "uid"]:
             setattr(self, c, np.load(SEQ / f"{c}.npy", mmap_mode="r"))
         self.items = dict(np.load(SEQ / "items.npz"))
         ud = np.load(SEQ / "userdays.npz")

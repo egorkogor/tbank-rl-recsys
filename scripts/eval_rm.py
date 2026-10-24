@@ -17,7 +17,7 @@ from scipy.stats import rankdata  # noqa: E402
 from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, TRAIN_END, VAL_DAYS  # noqa: E402
 from rlrec.data import Seq, label_valid_eval  # noqa: E402
 from rlrec.model import limit_gpu, make_batch  # noqa: E402
-from rlrec.rm import HEADS, load_rm, side_features  # noqa: E402
+from rlrec.rm import HEADS, load_rm, logged_counts, side_features  # noqa: E402
 
 
 def auc(y: np.ndarray, s: np.ndarray) -> float:
@@ -76,8 +76,7 @@ def score_logged(rms: list, seq, days: list[int], device, bs: int = 32, max_wind
             continue
         gv = g[sel]
         cand = torch.from_numpy(tok[gv]).to(device)
-        side = torch.from_numpy(side_features(seq.items["track_len"][tok[gv]], seq.items["log_pop"][tok[gv]],
-                                              np.asarray(seq.rep_item)[gv], np.asarray(seq.rep_artist)[gv])).to(device)
+        side = torch.from_numpy(side_features(seq.items, tok[gv], logged_counts(seq, gv))).to(device)
         inp = {k: v[:, :-1] for k, v in b.items()}
         selt = torch.from_numpy(sel).to(device)
         for j, m in enumerate(rms):

@@ -11,7 +11,7 @@ from rlrec.config import CONT_GAP, LIKE_HORIZON, N_SPECIAL, OOT_DAYS, TRAIN_END,
 from rlrec.data import Seq, rm_train_mask  # noqa: E402
 from rlrec.evaluate import contexts  # noqa: E402
 from rlrec.model import Policy, make_batch  # noqa: E402
-from rlrec.rm import HistoryCounts  # noqa: E402
+from rlrec.rm import COUNT_KEYS, HistoryCounts  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -77,9 +77,9 @@ def test_history_counts_match_logged_side_features(seq):
     tok = np.asarray(seq.tok)
     g = rng.choice(np.flatnonzero(tok[: 5_000_000] >= N_SPECIAL), 300, replace=False)
     hc = HistoryCounts(seq)
-    ri, ra = hc([(int(seq.ptr[uidx[x]]), int(x)) for x in g], tok[g][:, None])
-    assert (ri[:, 0] == np.asarray(seq.rep_item)[g]).all()
-    assert (ra[:, 0] == np.asarray(seq.rep_artist)[g]).all()
+    c = hc([(int(seq.ptr[uidx[x]]), int(x)) for x in g], tok[g][:, None])
+    for k in COUNT_KEYS:
+        assert (c[k][:, 0] == np.asarray(getattr(seq, k))[g]).all(), k
 
 
 def test_targets_are_that_days_listen_plus(seq):

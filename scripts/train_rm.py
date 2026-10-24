@@ -18,7 +18,7 @@ import torch  # noqa: E402
 from rlrec.config import CKPT, DEVICE, N_SPECIAL, SEED  # noqa: E402
 from rlrec.data import Seq, rm_train_mask  # noqa: E402
 from rlrec.model import limit_gpu, make_batch, save  # noqa: E402
-from rlrec.rm import HEADS, RewardModel, loss_fn, side_features  # noqa: E402
+from rlrec.rm import HEADS, RewardModel, logged_counts, loss_fn, side_features  # noqa: E402
 from train_sft import train_ends, windows  # noqa: E402
 
 
@@ -29,8 +29,7 @@ def targets(seq, b: dict, ok: np.ndarray, device):
     valid = (b["mask"][:, 1:] & b["mask"][:, :-1]).cpu().numpy() & (gi_next.cpu().numpy() >= 0) & ok[g]
     gv = g[valid]
     tok = np.asarray(seq.tok)[gv]
-    side = side_features(seq.items["track_len"][tok], seq.items["log_pop"][tok], np.asarray(seq.rep_item)[gv],
-                         np.asarray(seq.rep_artist)[gv])
+    side = side_features(seq.items, tok, logged_counts(seq, gv))
     pr = np.asarray(seq.pr)[gv].astype(np.float32)
     y = {"ratio": np.clip(pr, 0, 100) / 100, "lp": pr >= 50, "skip": pr < 10, "like": np.asarray(seq.like)[gv],
          "cont": np.asarray(seq.cont)[gv]}

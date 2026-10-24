@@ -37,9 +37,7 @@ class Scorer:
         self.base = torch.from_numpy(base_lp_by_length(seq, train_end)).to(device)
 
     def side(self, user_ctx: list[tuple[int, int]], cands: np.ndarray) -> torch.Tensor:
-        ri, ra = self.counts(user_ctx, cands)
-        it = self.seq.items
-        return torch.from_numpy(side_features(it["track_len"][cands], it["log_pop"][cands], ri, ra)).to(self.dev)
+        return torch.from_numpy(side_features(self.seq.items, cands, self.counts(user_ctx, cands))).to(self.dev)
 
     @torch.no_grad()
     def probs(self, rm, h: torch.Tensor, cands: torch.Tensor, side: torch.Tensor) -> torch.Tensor:
