@@ -65,7 +65,7 @@ def reward_of_lists(rms: list, scorer, seq, uds: np.ndarray, lists: np.ndarray, 
                     mins = session_minutes(p, scorer.reward(p, cand, "minutes", side).float())  # [R, C]
                     cat = torch.where(side[..., 5] > 0.5, 0, torch.where(side[..., 4] > 0.5, 2, 1)).long()
                     add = torch.zeros_like(scorer.week).scatter_add_(1, cat, mins)
-                    sh = scorer.st["bal_share"]
+                    sh = scorer.st["bal_s_new"]
                     rk = balanced(scorer.week + add, sh) - balanced(scorer.week, sh)
                 else:
                     rk = scorer.reward(p, cand, k, side).float().mean(1)

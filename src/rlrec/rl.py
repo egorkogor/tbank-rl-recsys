@@ -14,10 +14,12 @@ from .rm import HistoryCounts, side_features
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
 REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip", "wtg", "add", "spotify",
            "balanced")
-# Balanced minutes (owner's metric, 24.10): B = (sum_k sqrt(s*_k M_k))^2 over k = old (heard track),
-# new track of a known artist, new artist. B <= total minutes, equality iff the mix equals s* (Cauchy-Schwarz);
-# homogeneous of degree 1, so it reads in minutes and grows without bound. dB/dM_k = sqrt(s*_k B / M_k).
-BAL_EPS = 1.0  # minutes added to every category of the user's week (no infinite marginal value at M_k = 0)
+# Balanced minutes (owner's metric, 24.10, revised): B = T * K(s), T = old + new minutes of the week,
+# s = new / T, new = tracks the user had not heard (any artist). BC(s) = sqrt(s s*) + sqrt((1-s)(1-s*));
+# K = BC^2 below the target share s*, K = 1 - KAPPA (1 - BC^2) above it (too much new costs 4x less than
+# too little). B <= T with equality at s = s*; B reads in minutes and grows without bound.
+BAL_EPS = 1.0  # minutes added to both parts of the user's week (finite marginal value at zero)
+KAPPA = 0.25
 WEEK = 7 * 86_400
 SPOTIFY_ALPHA = 0.1
 
@@ -38,9 +40,16 @@ def event_category(rep_item: np.ndarray, rep_artist: np.ndarray) -> np.ndarray:
     return np.where(rep_item > 0, 0, np.where(rep_artist > 0, 1, 2)).astype(np.int64)
 
 
-def balanced(M: torch.Tensor, share: torch.Tensor) -> torch.Tensor:
-    """B = (sum_k sqrt(s*_k M_k))^2 for M [..., 3] minutes."""
-    return (share.sqrt() * M.clamp(min=0).sqrt()).sum(-1) ** 2
+def balance_coef(s: torch.Tensor, s_star: float) -> torch.Tensor:
+    bc2 = ((s * s_star).clamp(min=0).sqrt() + ((1 - s) * (1 - s_star)).clamp(min=0).sqrt()) ** 2
+    return torch.where(s <= s_star, bc2, 1 - KAPPA * (1 - bc2))
+
+
+def balanced(M: torch.Tensor, s_star: float) -> torch.Tensor:
+    """B for M [..., 3] minutes (old, new track of a known artist, new artist): new = the last two."""
+    old, new = M[..., 0].clamp(min=0), M[..., 1:].sum(-1).clamp(min=0)
+    T = old + new
+    return T * balance_coef(new / T.clamp(min=1e-9), s_star)
 
 
 def label_stats(seq, train_end: int, n_buckets: int = 20) -> dict:
@@ -68,7 +77,7 @@ def label_stats(seq, train_end: int, n_buckets: int = 20) -> dict:
     mins = np.clip(pr[trall], 0, 100) / 100 * tlen[tok[trall]] / 60
     cat = event_category(np.asarray(seq.rep_item)[trall], np.asarray(seq.rep_artist)[trall])
     share = np.bincount(cat, weights=mins, minlength=3) / mins.sum()
-    return {"bal_share": share.astype(np.float32), "wtg_mu": mu[tb].astype(np.float32), "wtg_sd": np.maximum(sd[tb], 1.0).astype(np.float32),
+    return {"bal_share": share.astype(np.float32), "bal_s_new": float(share[1:].sum()), "wtg_mu": mu[tb].astype(np.float32), "wtg_sd": np.maximum(sd[tb], 1.0).astype(np.float32),
             "min_mu": float((sec / 60).mean()), "min_sd": float((sec / 60).std()),
             "like_mu": float(like[tr].mean()), "like_sd": float(like[tr].std()),
             "skip_mu": float((pr[tr] < 10).mean()), "skip_sd": float((pr[tr] < 10).std()),
@@ -120,13 +129,19 @@ class Scorer:
         self.week = torch.from_numpy(out).to(self.dev) + BAL_EPS
 
     def balanced_marginal(self, side: torch.Tensor) -> torch.Tensor:
-        """dB/dM_k for the candidate's category given self.week; side features 5 = repeat, 4 = new artist."""
-        share = self.st["bal_share"]
-        Bu = balanced(self.week, share)  # [R]
-        v = (share * Bu[:, None] / self.week).sqrt()  # [R, 3]
-        cat = torch.where(side[..., 5] > 0.5, 0, torch.where(side[..., 4] > 0.5, 2, 1)).long()
-        vv = v[:, None, :].expand(*cat.shape, 3)
-        return vv.gather(-1, cat[..., None])[..., 0]
+        """dB/dM of the candidate's part (old if the user heard the track: side feature 5) given self.week,
+        by automatic differentiation of B at the user's week."""
+        with torch.enable_grad():
+            old = self.week[:, 0].clone().requires_grad_(True)
+            new = self.week[:, 1:].sum(-1).clone().requires_grad_(True)
+            B = balanced(torch.stack([old, new, torch.zeros_like(new)], -1), self.st["bal_s_new"])
+            g_old, g_new = torch.autograd.grad(B.sum(), [old, new])
+        g_old, g_new = g_old.detach(), g_new.detach()
+        rep = side[..., 5] > 0.5
+        shape = rep.shape
+        go = g_old.view(-1, *([1] * (len(shape) - 1))).expand(shape)
+        gn = g_new.view(-1, *([1] * (len(shape) - 1))).expand(shape)
+        return torch.where(rep, go, gn)
 
     def spotify(self, skip, cands, side, first_in_rollout):
         """Hansen et al. (WSDM'21, eq. 13): R = rel - c + alpha * d * rel, rel = 1 - P(skip), c = 0.1.

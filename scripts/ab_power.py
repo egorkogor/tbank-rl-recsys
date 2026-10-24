@@ -71,7 +71,10 @@ def main():
     for d_, mask in ((cur, m), (prev, mp)):
         Mk = np.stack([np.bincount(uidx[mask], weights=mins_ev[mask] * (cat_ev[mask] == k), minlength=nu)
                        for k in range(3)], 1)
-        d_["balanced"] = (np.sqrt(s_star[None] * Mk).sum(1)) ** 2
+        # revised owner formula: two parts (old / new music), softer penalty for too much new (KAPPA)
+        import torch
+        from rlrec.rl import balanced as _bal
+        d_["balanced"] = _bal(torch.from_numpy(Mk), float(s_star[1:].sum())).numpy()
         d_["balance_coef"] = np.where(Mk.sum(1) > 0, d_["balanced"] / np.maximum(Mk.sum(1), 1e-9), np.nan)
     out = {"users_active_week": int(act.sum())}
     out["balanced_s_star"] = s_star.round(4).tolist()
