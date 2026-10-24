@@ -4,6 +4,7 @@
 cd "$(dirname "$0")"
 PY=../.venv/Scripts/python.exe
 while [ ! -f ../logs/queue_after_sft.done ]; do sleep 30; done
+[ -f ../artifacts/runs/rm_eval_val_snapshot.json ] || $PY eval_rm.py --stage val --snapshot > ../logs/rm_eval_val_snapshot.log 2>&1
 run() {  # tag, args...
   local tag=$1; shift
   [ -f ../artifacts/runs/rl/$tag/step400.pt ] && return 0
