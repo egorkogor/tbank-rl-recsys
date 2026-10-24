@@ -12,7 +12,7 @@ from .model import append, make_batch
 from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
-REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo")
+REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes")
 
 
 def base_lp_by_length(seq, train_end: int) -> np.ndarray:
@@ -63,6 +63,9 @@ class Scorer:
             return cont
         if kind == "sec":
             return ratio * self.tlen[cands] / 200.0
+        if kind == "minutes":
+            # expected listened minutes of the track; over a sequence see session_minutes()
+            return ratio * self.tlen[cands] / 60.0
         if kind == "mix":
             return lp + 0.5 * like - 0.5 * skip
         if kind == "placebo":
@@ -72,6 +75,14 @@ class Scorer:
             # plus the usual Listen+ so the list stays listenable
             return lp + 2.0 * adopt * side[..., 4]
         raise ValueError(kind)
+
+
+def session_minutes(p: torch.Tensor, minutes: torch.Tensor) -> torch.Tensor:
+    """Per-step expected minutes weighted by the chance the session is still alive at that step:
+    r_t = prod_{k<t} P(cont_k) * E[minutes_t]; the sum over t is the expected listened minutes of the sequence."""
+    cont = p[..., 4].float()
+    alive = torch.cumprod(torch.cat([torch.ones_like(cont[..., :1]), cont[..., :-1]], -1), -1)
+    return alive * minutes
 
 
 def exact_kl(logp: torch.Tensor, logp_ref: torch.Tensor) -> torch.Tensor:
@@ -135,6 +146,8 @@ def step_seq(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float
     side = torch.stack([scorer.side(ctx_g, acts[:, t:t + 1].cpu().numpy())[:, 0] for t in range(T)], 1)
     p = scorer.probs(rm, hr, acts, side)
     r = scorer.reward(p, acts, kind, side)  # [R, T]
+    if kind == "minutes":
+        r = session_minutes(p, r)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         logp = F.log_softmax(policy.logits_pos(full, policy.hidden(full), pos.tolist()), -1)  # [R, T, V]
     lp_a = logp.gather(2, acts[:, :, None])[:, :, 0].sum(1)

@@ -53,7 +53,13 @@ def reward_of_lists(rms: list, scorer, seq, uds: np.ndarray, lists: np.ndarray, 
             p = scorer.probs(rm, h, cand, side)
             lp_items[j, i:i + bs] = p[..., 1].float().cpu().numpy()
             for k in kinds:
-                out[k][j, i:i + bs] = scorer.reward(p, cand, k, side).float().mean(1).cpu().numpy()
+                if k == "minutes":
+                    # the list as a session in rank order: expected listened minutes of all k tracks
+                    from .rl import session_minutes
+                    rk = session_minutes(p, scorer.reward(p, cand, k, side).float()).sum(1)
+                else:
+                    rk = scorer.reward(p, cand, k, side).float().mean(1)
+                out[k][j, i:i + bs] = rk.cpu().numpy()
     out["lp_items"] = lp_items
     return out
 
