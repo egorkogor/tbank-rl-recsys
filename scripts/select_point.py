@@ -6,7 +6,8 @@ present, else m1-m3); plain session minutes are reported next to it. Constraints
   1. NDCG@10: verdict not "хуже" and delta >= -2 % of SFT;
   2. Recall@100 on tracks new to the user: delta >= -10 % of SFT;
   3. judges' P(skip) of the top-10: at most +0.005 over SFT;
-  4. share of user-days whose top-10 holds the most frequent track: at most 2 x SFT.
+  4. share of user-days whose top-10 holds the most frequent track: at most 2 x SFT;
+  5. judges' P(Listen+) of the top-10 (completion, owner 24.10): at most 0.005 below SFT.
 If nothing passes, the recommendation is SFT.
 """
 import argparse
@@ -41,6 +42,7 @@ def main():
     b_ndcg = float(np.nanmean(b["rel_ndcg@10"]))
     b_new = float(np.nanmean(b["rel_recall@100_new"]))
     b_skip = float(judges(b, "skip").mean())
+    b_lp = float(judges(b, "lp").mean())
     b_top = base["json"]["behaviour"]["top_item_share"]
     rows = []
     for spec, d in ev.items():
@@ -52,15 +54,17 @@ def main():
         ci_min = user_bootstrap(users, judges(z, "minutes"), judges(b, "minutes"))
         d_new = float(np.nanmean(z["rel_recall@100_new"])) - b_new
         d_skip = float(judges(z, "skip").mean()) - b_skip
+        d_lp = float(judges(z, "lp").mean()) - b_lp
         top = j["behaviour"]["top_item_share"]
         checks = {
             "ndcg": verdict(ci_n, REL_THRESHOLD * b_ndcg) != "хуже" and ci_n["mean"] >= -REL_THRESHOLD * b_ndcg,
             "new_tracks": d_new >= -0.10 * b_new,
             "skip": d_skip <= 0.005,
             "concentration": top <= 2 * b_top,
+            "completion": d_lp >= -0.005,
         }
         rows.append({"spec": spec, "d_balanced": ci_m, "d_minutes": ci_min, "d_ndcg": ci_n, "d_ndcg_rel": ci_n["mean"] / b_ndcg,
-                     "d_recall100_new_rel": d_new / b_new if b_new else 0.0, "d_skip": d_skip,
+                     "d_recall100_new_rel": d_new / b_new if b_new else 0.0, "d_skip": d_skip, "d_lp": d_lp,
                      "top_item_share": top, "checks": checks, "passes": all(checks.values())})
     rows.sort(key=lambda r: -r["d_balanced"]["mean"])
     ok = [r for r in rows if r["passes"]]
