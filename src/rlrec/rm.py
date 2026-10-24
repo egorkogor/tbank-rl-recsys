@@ -16,7 +16,7 @@ import torch.nn.functional as F
 
 from .model import Policy
 
-HEADS = ("ratio", "lp", "skip", "like", "cont")
+HEADS = ("ratio", "lp", "skip", "like", "cont", "adopt")
 N_SIDE = 9
 COUNT_KEYS = ("rep_item", "rep_artist", "rep_lp", "rep_skip", "rep_artist_lp")
 PRIOR_LP, PRIOR_SKIP, K_SMOOTH = 0.68, 0.22, 2.0
@@ -58,11 +58,16 @@ def logged_counts(seq, gi: np.ndarray) -> dict:
 
 
 def loss_fn(logits: torch.Tensor, y: dict) -> tuple[torch.Tensor, dict]:
-    """BCE on every head; ratio is a soft label in [0, 1]."""
+    """BCE on every head; ratio is a soft label in [0, 1]; adopt is trained only where defined (>= 0)."""
     parts = {}
     for j, name in enumerate(HEADS):
-        parts[name] = F.binary_cross_entropy_with_logits(logits[:, j], y[name].float())
-    w = {"ratio": 1.0, "lp": 1.0, "skip": 1.0, "like": 1.0, "cont": 0.5}
+        if name == "adopt":
+            m = y[name] >= 0
+            parts[name] = (F.binary_cross_entropy_with_logits(logits[m, j], y[name][m].float())
+                           if m.any() else logits[:, j].sum() * 0.0)
+        else:
+            parts[name] = F.binary_cross_entropy_with_logits(logits[:, j], y[name].float())
+    w = {"ratio": 1.0, "lp": 1.0, "skip": 1.0, "like": 1.0, "cont": 0.5, "adopt": 0.5}
     return sum(w[k] * v for k, v in parts.items()), {k: float(v.detach()) for k, v in parts.items()}
 
 

@@ -14,8 +14,8 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 from scipy.stats import rankdata  # noqa: E402
 
-from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, TRAIN_END, VAL_DAYS  # noqa: E402
-from rlrec.data import Seq, label_valid_eval  # noqa: E402
+from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, T_END, TRAIN_END, VAL_DAYS  # noqa: E402
+from rlrec.data import Seq, adopt_label, label_valid_eval  # noqa: E402
 from rlrec.model import limit_gpu, make_batch  # noqa: E402
 from rlrec.rm import HEADS, load_rm, logged_counts, side_features  # noqa: E402
 
@@ -122,7 +122,8 @@ def main():
     gi = sc["gi"]
     pr = np.asarray(seq.pr)[gi]
     y = {"ratio": np.clip(pr, 0, 100) / 100, "lp": pr >= 50, "skip": pr < 10, "like": np.asarray(seq.like)[gi],
-         "cont": np.asarray(seq.cont)[gi]}
+         "cont": np.asarray(seq.cont)[gi], "adopt": adopt_label(seq, gi, T_END)}
+    ad_ok = y["adopt"] >= 0
     uidx = seq.user_index()
     group = uidx[gi].astype(np.int64) * 1000 + np.asarray(seq.day)[gi]
     rep = np.asarray(seq.rep_item)[gi] > 0
@@ -133,7 +134,9 @@ def main():
     if judges is not None:
         preds["judges_mean"] = judges
     for name, p in preds.items():
-        r = {h: auc(y[h], p[:, j]) for j, h in enumerate(HEADS) if h != "ratio"}
+        r = {h: auc(y[h], p[:, j]) for j, h in enumerate(HEADS) if h not in ("ratio", "adopt")}
+        r["adopt"] = auc(y["adopt"][ad_ok], p[ad_ok, HEADS.index("adopt")])
+        r["adopt_base_rate"] = float(y["adopt"][ad_ok].mean())
         r["gauc_lp"] = gauc(group, y["lp"], p[:, 1])
         r["rmse_ratio"] = float(np.sqrt(np.mean((p[:, 0] - y["ratio"]) ** 2)))
         r["auc_lp_repeat"] = auc(y["lp"][rep], p[rep, 1])

@@ -15,12 +15,12 @@ import rlrec  # noqa: F401  (thread limits before polars)
 import numpy as np
 import polars as pl
 
-from .config import (CONT_GAP, DATA, GAP_EDGES, LIKE_HORIZON, LISTEN_PLUS, N_SPECIAL, OOT_DAYS, PARTIAL, RL_DAYS, SEQ,
+from .config import (ADOPT_HORIZON, CONT_GAP, DATA, GAP_EDGES, LIKE_HORIZON, LISTEN_PLUS, N_SPECIAL, OOT_DAYS, PARTIAL, RL_DAYS, SEQ,
                      SKIP, T_END, TRAIN_END, UNK, VAL_DAYS, VOCAB, day_start)
 
 COLS = ["tok", "item", "artist", "t", "day", "org", "pr", "outcome", "gap", "rep_item", "rep_artist", "like", "cont"]
 # Prior Listen+ / skip listens of the same track and prior Listen+ of the same artist, per user (pair_stats).
-PAIR_COLS = ["rep_lp", "rep_skip", "rep_artist_lp"]
+PAIR_COLS = ["rep_lp", "rep_skip", "rep_artist_lp", "adopt"]
 
 
 def _outcome(pr: pl.Expr) -> pl.Expr:
@@ -130,11 +130,28 @@ def _prior_count(key: np.ndarray, ind: np.ndarray) -> np.ndarray:
     return out
 
 
+def _adopt(key: np.ndarray, t: np.ndarray, org: np.ndarray, horizon: int) -> np.ndarray:
+    """1 if an organic event with the same key follows within `horizon` seconds (time-ordered input)."""
+    order = np.argsort(key, kind="stable")
+    k, tt, oo = key[order], t[order].astype(np.int64), org[order]
+    g = np.cumsum(np.r_[True, k[1:] != k[:-1]]) - 1
+    big = np.int64(1) << 26  # > max t; groups later in sorted order get larger offsets
+    v = g * big + np.where(oo == 1, tt, big - 1)
+    suf = np.minimum.accumulate(v[::-1])[::-1] - g * big  # min organic t at or after p, within the group
+    nxt = np.r_[suf[1:], big - 1]
+    nxt = np.where(np.r_[g[1:] == g[:-1], False], nxt, big - 1)  # strictly after p, same group
+    out = np.empty(len(key), np.int8)
+    out[order] = ((nxt - tt) <= horizon).astype(np.int8)
+    return out
+
+
 def build_pair_stats(users_per_chunk: int = 1000) -> None:
     """Pair-history quality (task 1: the strongest hand-made features) in user chunks to keep memory low."""
     ptr = np.load(SEQ / "ptr.npy")
-    item, artist, pr = (np.load(SEQ / f"{c}.npy", mmap_mode="r") for c in ("item", "artist", "pr"))
+    item, artist, pr, t, org, rep_artist = (np.load(SEQ / f"{c}.npy", mmap_mode="r")
+                                            for c in ("item", "artist", "pr", "t", "org", "rep_artist"))
     out = {c: np.zeros(int(ptr[-1]), np.int32) for c in PAIR_COLS}
+    out["adopt"] = np.full(int(ptr[-1]), -1, np.int8)
     for u0 in range(0, len(ptr) - 1, users_per_chunk):
         s, e = int(ptr[u0]), int(ptr[min(u0 + users_per_chunk, len(ptr) - 1)])
         local = np.repeat(np.arange(min(users_per_chunk, len(ptr) - 1 - u0), dtype=np.int64), np.diff(ptr[u0:u0 + users_per_chunk + 1]))
@@ -144,6 +161,10 @@ def build_pair_stats(users_per_chunk: int = 1000) -> None:
         out["rep_lp"][s:e] = _prior_count(ki, p >= 50)
         out["rep_skip"][s:e] = _prior_count(ki, p < 10)
         out["rep_artist_lp"][s:e] = _prior_count(ka, p >= 50)
+        # Discovery label, defined only for algorithmic listens of an artist new to the user.
+        new = (np.asarray(org[s:e]) == 0) & (np.asarray(rep_artist[s:e]) == 0) & (np.asarray(artist[s:e]) > 0)
+        ad = _adopt(ka, np.asarray(t[s:e]), np.asarray(org[s:e]), ADOPT_HORIZON)
+        out["adopt"][s:e] = np.where(new, ad, -1)
     for c, v in out.items():
         np.save(SEQ / f"{c}.npy", v)
 
@@ -188,3 +209,10 @@ def rm_train_mask(seq: Seq, horizon: int = max(CONT_GAP, LIKE_HORIZON)) -> np.nd
 def label_valid_eval(seq: Seq) -> np.ndarray:
     """Evaluation labels are valid unless the horizon runs past the end of the log."""
     return np.asarray(seq.t) + max(CONT_GAP, LIKE_HORIZON) < T_END
+
+
+def adopt_label(seq: Seq, gi: np.ndarray, cutoff_t: int) -> np.ndarray:
+    """Discovery label of listens gi: 1 / 0, or -1 if undefined (not a new artist) or the 7-day horizon
+    does not close before cutoff_t (training: day_start(TRAIN_END); evaluation: end of the log)."""
+    a = np.asarray(seq.adopt)[gi].astype(np.int64)
+    return np.where(np.asarray(seq.t)[gi] + ADOPT_HORIZON < cutoff_t, a, -1)

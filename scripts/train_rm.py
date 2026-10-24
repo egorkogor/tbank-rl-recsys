@@ -15,8 +15,8 @@ import rlrec  # noqa: E402,F401
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
-from rlrec.config import CKPT, DEVICE, N_SPECIAL, SEED  # noqa: E402
-from rlrec.data import Seq, rm_train_mask  # noqa: E402
+from rlrec.config import CKPT, DEVICE, N_SPECIAL, SEED, TRAIN_END, day_start  # noqa: E402
+from rlrec.data import Seq, adopt_label, rm_train_mask  # noqa: E402
 from rlrec.model import limit_gpu, make_batch, save  # noqa: E402
 from rlrec.rm import HEADS, RewardModel, logged_counts, loss_fn, side_features  # noqa: E402
 from train_sft import train_ends, windows  # noqa: E402
@@ -32,7 +32,7 @@ def targets(seq, b: dict, ok: np.ndarray, device):
     side = side_features(seq.items, tok, logged_counts(seq, gv))
     pr = np.asarray(seq.pr)[gv].astype(np.float32)
     y = {"ratio": np.clip(pr, 0, 100) / 100, "lp": pr >= 50, "skip": pr < 10, "like": np.asarray(seq.like)[gv],
-         "cont": np.asarray(seq.cont)[gv]}
+         "cont": np.asarray(seq.cont)[gv], "adopt": adopt_label(seq, gv, day_start(TRAIN_END))}
     t = lambda x: torch.from_numpy(np.asarray(x)).to(device)  # noqa: E731
     return t(valid), t(tok), t(side), {k: t(v) for k, v in y.items()}
 

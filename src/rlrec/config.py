@@ -37,6 +37,7 @@ GAP_EDGES = [60, 300, 1800, 10_800, 86_400, 7 * 86_400]
 GEN_GAP = 2  # generated items are "next track in the session": gap 1-5 min
 CONT_GAP = 1800  # session continues if the next listen starts within 30 min
 LIKE_HORIZON = DAY
+ADOPT_HORIZON = 7 * DAY  # discovery: organic listen of a newly recommended artist within 7 days
 
 
 def day_start(d: int) -> int:

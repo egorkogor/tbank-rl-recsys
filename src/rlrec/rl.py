@@ -12,7 +12,7 @@ from .model import append, make_batch
 from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
-REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix")
+REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc")
 
 
 def base_lp_by_length(seq, train_end: int) -> np.ndarray:
@@ -47,8 +47,9 @@ class Scorer:
         with torch.autocast("cuda", dtype=torch.bfloat16):
             return torch.sigmoid(rm.head(h, cands, side))
 
-    def reward(self, p: torch.Tensor, cands: torch.Tensor, kind: str) -> torch.Tensor:
-        ratio, lp, skip, like, cont = p.unbind(-1)
+    def reward(self, p: torch.Tensor, cands: torch.Tensor, kind: str, side: torch.Tensor | None = None) -> torch.Tensor:
+        """side (the RM side features) is needed by "disc": discovery only counts for artists new to the user."""
+        ratio, lp, skip, like, cont, adopt = p.unbind(-1)
         if kind == "ratio":
             return ratio
         if kind == "lp":
@@ -61,6 +62,10 @@ class Scorer:
             return ratio * self.tlen[cands] / 200.0
         if kind == "mix":
             return lp + 0.5 * like - 0.5 * skip
+        if kind == "disc":
+            # long-term proxy: dosage of new artists the user will look up on their own within a week,
+            # plus the usual Listen+ so the list stays listenable
+            return lp + 2.0 * adopt * side[..., 4]
         raise ValueError(kind)
 
 
@@ -89,7 +94,7 @@ def step_t1(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float,
             h = rm.hidden(b)[:, -1]
         a = torch.multinomial(logp.detach().exp(), G, replacement=True)
         side = scorer.side(ctx, a.cpu().numpy())
-        r = scorer.reward(scorer.probs(rm, h, a, side), a, kind)
+        r = scorer.reward(scorer.probs(rm, h, a, side), a, kind, side)
     A = _advantage(r)
     pg = -(A * logp.gather(1, a)).mean()
     kl = exact_kl(logp, logp_ref).mean()
@@ -124,7 +129,7 @@ def step_seq(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float
         logp_ref = F.log_softmax(ref.logits_pos(full, ref.hidden(full), pos.tolist()), -1)
     side = torch.stack([scorer.side(ctx_g, acts[:, t:t + 1].cpu().numpy())[:, 0] for t in range(T)], 1)
     p = scorer.probs(rm, hr, acts, side)
-    r = scorer.reward(p, acts, kind)  # [R, T]
+    r = scorer.reward(p, acts, kind, side)  # [R, T]
     with torch.autocast("cuda", dtype=torch.bfloat16):
         logp = F.log_softmax(policy.logits_pos(full, policy.hidden(full), pos.tolist()), -1)  # [R, T, V]
     lp_a = logp.gather(2, acts[:, :, None])[:, :, 0].sum(1)

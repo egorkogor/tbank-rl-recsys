@@ -53,7 +53,7 @@ def reward_of_lists(rms: list, scorer, seq, uds: np.ndarray, lists: np.ndarray, 
             p = scorer.probs(rm, h, cand, side)
             lp_items[j, i:i + bs] = p[..., 1].float().cpu().numpy()
             for k in kinds:
-                out[k][j, i:i + bs] = scorer.reward(p, cand, k).float().mean(1).cpu().numpy()
+                out[k][j, i:i + bs] = scorer.reward(p, cand, k, side).float().mean(1).cpu().numpy()
     out["lp_items"] = lp_items
     return out
 
