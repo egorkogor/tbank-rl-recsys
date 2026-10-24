@@ -4,6 +4,7 @@ For each policy and val user-day (subset), step k = 1..T, three context modes:
   open     generated tracks appended with outcome UNKNOWN (the policy's own rollout, greedy top-1)
   imputed  generated tracks appended with the outcome the training RM predicts for them
   oracle   the real first k-1 listens of the day with their real outcomes (teacher forcing)
+  open_ban as open, but tracks generated earlier in the chain cannot be recommended again
 Per step: NDCG@10 and hit@10 against the day's Listen+ set, train / judge reward and ensemble spread of the
 top-1 track, repeats inside the rollout and same-artist chains.
 """
@@ -49,6 +50,9 @@ def run(policy, rms, scorer, seq, uds, mode, T, dev, bs=128):
                 b = make_batch(seq, cc, 256 + t, dev)
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 z = policy.last_logits(b)
+            if mode == "open_ban" and prev:
+                # a generated track is not a listen: forbid re-recommending tracks generated earlier in the chain
+                z = z.scatter(1, torch.from_numpy(np.stack(prev, 1)).to(z.device), float("-inf"))
             top = z.topk(10, 1).indices
             a = top[:, 0]
             top_np = top.cpu().numpy()
@@ -71,7 +75,7 @@ def run(policy, rms, scorer, seq, uds, mode, T, dev, bs=128):
             res["repeat"][i:i + bs, t] = [float(x in p) for x, p in zip(a_np, zip(*prev))] if prev else 0.0
             res["same_artist"][i:i + bs, t] = (art[a_np] == art[prev[-1]]).astype(float) if prev else 0.0
             prev.append(a_np)
-            if mode == "open":
+            if mode in ("open", "open_ban"):
                 b = append(b, a)
             elif mode == "imputed":
                 p0 = ps[0]
@@ -85,6 +89,7 @@ def main():
     ap.add_argument("specs", nargs="+", help="sft or rl:<run>:<step>")
     ap.add_argument("--T", type=int, default=5)
     ap.add_argument("--n", type=int, default=4000)
+    ap.add_argument("--modes", default="open,imputed,oracle", help="also: open_ban (no repeats inside the chain)")
     a = ap.parse_args()
     dev = torch.device(DEVICE)
     limit_gpu(dev)
@@ -107,11 +112,11 @@ def main():
             _, r, s = spec.split(":")
             pol = load_policy(RUNS / "rl" / r / f"step{s}.pt", dev).eval()
         out[spec] = {}
-        for mode in ("open", "imputed", "oracle"):
+        for mode in a.modes.split(","):
             res = run(pol, rms, scorer, seq, uds, mode, a.T, dev)
             out[spec][mode] = {k: np.nanmean(v, 0).round(5).tolist() for k, v in res.items()}
             print(spec, mode, json.dumps(out[spec][mode]), flush=True)
-    path = RUNS / "eval" / "val" / "multistep.json"
+    path = RUNS / "eval" / "val" / ("multistep.json" if a.modes == "open,imputed,oracle" else "multistep_extra.json")
     path.parent.mkdir(parents=True, exist_ok=True)
     old = json.loads(path.read_text()) if path.exists() else {}
     old.update(out)
