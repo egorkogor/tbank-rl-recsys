@@ -46,7 +46,39 @@ def main():
     days_prev = np.zeros(nu)
     udp = np.unique(np.stack([up, day[mp]], 1), axis=0)
     np.add.at(days_prev, udp[:, 0], 1)
+    # owner's metric tree (24.10): minutes per user-week (north star), sessions per user-week (returns),
+    # discovery: adopted new artists per user-week and the share of minutes on artists new to the user
+    t_all = np.asarray(seq.t)
+    tlen_ev = seq.items["track_len"][np.asarray(seq.tok)]  # OOV tracks get the default 200 s
+    mins_ev = np.clip(pr, 0, 100) / 100 * tlen_ev / 60
+    gap_new = np.r_[True, (np.diff(t_all) > 1800) | (np.diff(uidx) != 0)]  # session start
+    rep_art, adopt = np.asarray(seq.rep_artist), np.asarray(seq.adopt)
+
+    def weekly(mask):
+        uu = uidx[mask]
+        return {"minutes": np.bincount(uu, weights=mins_ev[mask], minlength=nu),
+                "sessions": np.bincount(uu, weights=gap_new[mask], minlength=nu),
+                "new_artist_minutes": np.bincount(uu, weights=mins_ev[mask] * (rep_art[mask] == 0), minlength=nu),
+                "adopted_artists": np.bincount(uu, weights=(adopt[mask] == 1), minlength=nu)}
+
+    cur, prev = weekly(m), weekly(mp)
     out = {"users_active_week": int(act.sum())}
+    for name in ("minutes", "sessions", "adopted_artists"):
+        x, xp = cur[name][act], prev[name][act]
+        rho = float(np.corrcoef(x, xp)[0, 1])
+        out[f"{name}_per_user_week"] = {
+            "mean": float(x.mean()), "sd": float(x.std()), "rho_prev_week": rho,
+            "n_per_arm_1pct": n_per_arm(x.var(), x.mean(), 0.01), "n_per_arm_2pct": n_per_arm(x.var(), x.mean(), 0.02),
+            "cuped_n_per_arm_1pct": n_per_arm(x.var() * (1 - rho ** 2), x.mean(), 0.01),
+            "cuped_n_per_arm_2pct": n_per_arm(x.var() * (1 - rho ** 2), x.mean(), 0.02),
+            "cuped_n_per_arm_5pct": n_per_arm(x.var() * (1 - rho ** 2), x.mean(), 0.05)}
+    # ratio metric: share of minutes on new artists (delta method)
+    a_, b_ = cur["new_artist_minutes"][act], cur["minutes"][act]
+    ok = b_ > 0
+    r_ = a_[ok].sum() / b_[ok].sum()
+    v_ = np.var(a_[ok] - r_ * b_[ok]) / b_[ok].mean() ** 2
+    out["new_artist_minutes_share"] = {"mean": float(r_), "n_per_arm_2pct": n_per_arm(v_, r_, 0.02),
+                                       "n_per_arm_5pct": n_per_arm(v_, r_, 0.05)}
     for name, x, xp in (("listen_plus_per_user_week", lp, lp_prev), ("active_days_per_user_week", days, days_prev),
                         ("plays_per_user_week", plays, plays_prev)):
         x, xp = x[act], xp[act]

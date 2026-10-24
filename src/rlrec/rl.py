@@ -12,7 +12,7 @@ from .model import append, make_batch
 from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
-REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes")
+REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip")
 
 
 def base_lp_by_length(seq, train_end: int) -> np.ndarray:
@@ -68,6 +68,8 @@ class Scorer:
             return ratio * self.tlen[cands] / 60.0
         if kind == "mix":
             return lp + 0.5 * like - 0.5 * skip
+        if kind == "skip":
+            return skip  # guardrail in evaluation (not a training reward)
         if kind == "placebo":
             return self.rand[cands]
         if kind == "disc":
