@@ -175,7 +175,10 @@ def save(model: nn.Module, path, **extra) -> None:
 def load_policy(path, device, copy: bool | None = None) -> Policy:
     """copy=True on a checkpoint without the repeat channel adds it with zero weights."""
     ck = torch.load(path, map_location=device, weights_only=False)
-    cfg = dict(ck["cfg"])
+    # training "last" checkpoints (resume format) carry no cfg: rebuild it from the weights
+    cfg = dict(ck["cfg"]) if "cfg" in ck else {"n_tok": ck["state"]["tok.weight"].shape[0],
+                                                "d": ck["state"]["tok.weight"].shape[1],
+                                                "copy": "copy_w" in ck["state"]}
     if copy is not None:
         cfg["copy"] = copy
     m = Policy(**cfg).to(device)
