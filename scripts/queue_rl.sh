@@ -9,7 +9,7 @@ run() {  # tag, args...
   local tag=$1; shift
   [ -f ../artifacts/runs/rl/$tag/step400.pt ] && return 0
   for try in 1 2 3; do
-    $PY train_rl.py --tag $tag --lr 1e-4 --steps 400 --eval-every 100 "$@" > ../logs/rl_$tag.log 2>&1 && return 0
+    $PY train_rl.py --tag $tag --lr 3e-4 --G 16 --steps 400 --eval-every 100 "$@" > ../logs/rl_$tag.log 2>&1 && return 0
     sleep 60
   done
 }
