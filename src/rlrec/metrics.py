@@ -65,10 +65,15 @@ def behaviour(seq, uds: np.ndarray, topk: np.ndarray, k: int = 10, rng_seed: int
     tlen = seq.items["track_len"]
     art = seq.items["artist"]
     rep = new_art = 0.0
+    len_dev = []  # personal length profile (owner, 24.10): |mean log length of the list - of the user's tracks|
+    loglen = np.log(np.clip(tlen, 10, 3600))
     for r, i in enumerate(uds):
         hist = history(seq, i)
         rep += np.isin(top[r], hist).mean()
         new_art += (~np.isin(art[top[r]], art[hist[hist >= 2]])).mean()
+        hv = hist[hist >= 2]
+        if len(hv):
+            len_dev.append(abs(loglen[top[r]].mean() - loglen[hv].mean()))
     return {
         f"coverage@{k}": float((freq > 0).sum() / (n_vocab - 2)),
         "unique_items": int((freq > 0).sum()),
@@ -79,6 +84,7 @@ def behaviour(seq, uds: np.ndarray, topk: np.ndarray, k: int = 10, rng_seed: int
         "track_len_mean": float(tlen[flat].mean()),
         "track_len_short_share": float((tlen[flat] <= 150).mean()),
         "repeat_share": rep / len(uds),
+        "len_dev_user_log": float(np.mean(len_dev)) if len_dev else float("nan"),
         "new_artist_share": new_art / len(uds),
     }
 

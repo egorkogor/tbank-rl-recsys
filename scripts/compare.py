@@ -69,8 +69,9 @@ def main():
         row["v_r_judge"] = verdict(ci, REWARD_THRESHOLD) if spec != a.base else ""
         row["gap_train_judge"] = row["r_train"] - row["r_judge"]
         row["lp_std"] = float(z["lp_std"].mean())
-        row.update({k: j["behaviour"][k] for k in ("coverage@10", "top_item_share", "jaccard_pairs",
-                                                   "track_len_mean", "repeat_share", "new_artist_share")})
+        row.update({k: j["behaviour"].get(k, float("nan")) for k in ("coverage@10", "top_item_share", "jaccard_pairs",
+                                                                     "track_len_mean", "repeat_share", "new_artist_share",
+                                                                     "len_dev_user_log")})
         rows.append(row)
     out = RUNS / "eval" / a.stage / f"compare_{a.kind}.json"
     out.write_text(json.dumps(rows, indent=1, ensure_ascii=False))
