@@ -39,9 +39,9 @@ def main():
     if out.exists():
         sys.exit(f"{out} exists: the OOT protocol is already frozen")
     commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
-                            cwd=Path(__file__).parent).stdout.strip()
+                            cwd=Path(__file__).parents[1]).stdout.strip()
     dirty = subprocess.run(["git", "status", "--porcelain", "--", "src", "scripts"], capture_output=True, text=True,
-                           cwd=Path(__file__).parent).stdout.strip()
+                           cwd=Path(__file__).parents[1]).stdout.strip()
     if dirty:
         sys.exit("commit src/ and scripts/ before freezing:\n" + dirty)
     files = [CKPT / "sft.pt", CKPT / "sft_nocopy_s6000.pt"] + sorted(CKPT.glob("rm_m*.pt"))
