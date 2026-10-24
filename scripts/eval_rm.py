@@ -14,7 +14,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 from scipy.stats import rankdata  # noqa: E402
 
-from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, T_END, TRAIN_END, VAL_DAYS  # noqa: E402
+from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, RUNS, T_END, TRAIN_END, VAL_DAYS  # noqa: E402
 from rlrec.data import Seq, adopt_label, label_valid_eval  # noqa: E402
 from rlrec.model import limit_gpu, make_batch  # noqa: E402
 from rlrec.rm import HEADS, load_rm, logged_counts, side_features  # noqa: E402
@@ -192,7 +192,7 @@ def main():
                                   "skip": auc(y["skip"], -s)}
     if len(members) > 1:
         res["ensemble_std_lp_mean"] = float(np.std([p[:, 1] for p in sc["pred"]], 0).mean())
-    out = ART / "runs" / f"rm_eval_{a.stage}{'_snapshot' if a.snapshot else ''}.json"
+    out = RUNS / f"rm_eval_{a.stage}{'_snapshot' if a.snapshot else ''}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1))
     print(json.dumps({k: v for k, v in res.items()}, indent=1)[:4000])
