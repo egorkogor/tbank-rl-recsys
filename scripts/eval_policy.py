@@ -142,7 +142,9 @@ def main():
                 "behaviour": beh}
         np.savez_compressed(outdir / f"{fn}.npz", uds=uds, topk=topk.astype(np.int32),
                             **{f"rel_{k}": v for k, v in rel.items()},
-                            **{f"rw_{k}": v for k, v in rw.items()}, lp_std=lp_items.std(0).mean(1))
+                            **{f"rw_{k}": v for k, v in rw.items()}, lp_std=lp_items.std(0).mean(1),
+                            lp_train_items=lp_items[0].astype(np.float16),
+                            lp_judge_items=lp_items[1:].mean(0).astype(np.float16))
         (outdir / f"{fn}.json").write_text(json.dumps(summ, indent=1, ensure_ascii=False))
         print(spec, json.dumps({"ndcg@10": summ["relevance"]["ndcg@10"]["mean"],
                                 "recall@100": summ["relevance"]["recall@100"]["mean"],
