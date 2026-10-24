@@ -45,18 +45,23 @@ def main():
     users = seq.ud["u"][base["uds"]]
     rows = []
     for spec, d in ev.items():
+        row = {}
         if a.only and spec not in a.only:
             continue
         z, j = d["npz"], d["json"]
         assert (z["uds"] == base["uds"]).all(), spec
-        row = {"spec": spec}
+        row["spec"] = spec
         for m in ("ndcg@10", "recall@100", "ndcg@10_new"):
             ci = user_bootstrap(users, z[f"rel_{m}"], base[f"rel_{m}"])
             b_mean = float(np.nanmean(base[f"rel_{m}"]))
             row[m] = float(np.nanmean(z[f"rel_{m}"]))
             row[f"d_{m}"] = ci
             row[f"v_{m}"] = verdict(ci, REL_THRESHOLD * b_mean) if spec != a.base else ""
-        rj, rj0 = z[f"rw_{a.kind}"][1:].mean(0), base[f"rw_{a.kind}"][1:].mean(0)
+        rj, rj0 = z[f"rw_{a.kind}"][1:4].mean(0), base[f"rw_{a.kind}"][1:4].mean(0)
+        if z[f"rw_{a.kind}"].shape[0] > 4 and base[f"rw_{a.kind}"].shape[0] > 4:
+            rs, rs0 = z[f"rw_{a.kind}"][4:].mean(0), base[f"rw_{a.kind}"][4:].mean(0)
+            row["r_judge_snap"] = float(rs.mean())
+            row["d_r_judge_snap"] = user_bootstrap(users, rs, rs0)
         ci = user_bootstrap(users, rj, rj0)
         row["r_judge"] = float(rj.mean())
         row["r_train"] = float(z[f"rw_{a.kind}"][0].mean())

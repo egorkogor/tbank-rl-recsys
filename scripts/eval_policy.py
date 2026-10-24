@@ -119,7 +119,11 @@ def main():
     if a.subset:
         uds = uds[:a.subset]
     ref = load_policy(CKPT / "sft.pt", dev).eval()
-    rms = [load_rm(CKPT / f"rm_m{m}.pt", dev).eval() for m in range(4)]
+    # m0 trains the policy; judges: m1-m3 (window-trained, like m0) and, if trained, m4-m6 (snapshot-trained)
+    members = [m for m in range(7) if (CKPT / f"rm_m{m}.pt").exists()]
+    assert members[:4] == [0, 1, 2, 3], members
+    rms = [load_rm(CKPT / f"rm_m{m}.pt", dev).eval() for m in members]
+    snap = [i for i, m in enumerate(members) if m >= 4]
     scorer = Scorer(seq, TRAIN_END, dev)
     outdir = RUNS / "eval" / a.stage
     outdir.mkdir(parents=True, exist_ok=True)
@@ -137,14 +141,17 @@ def main():
         summ = {"spec": spec, "n_userdays": int(len(uds)),
                 "relevance": {m: user_bootstrap(users, v, n_boot=200) for m, v in rel.items()},
                 "r_train": {k: float(v[0].mean()) for k, v in rw.items()},
-                "r_judge": {k: float(v[1:].mean()) for k, v in rw.items()},
-                "ensemble_std_lp": float(lp_items.std(0).mean()),
+                "r_judge": {k: float(v[1:4].mean()) for k, v in rw.items()},
+                "r_judge_snap": {k: float(v[snap].mean()) for k, v in rw.items()} if snap else None,
+                "members": members,
+                "ensemble_std_lp": float(lp_items[:4].std(0).mean()),
                 "behaviour": beh}
         np.savez_compressed(outdir / f"{fn}.npz", uds=uds, topk=topk.astype(np.int32),
                             **{f"rel_{k}": v for k, v in rel.items()},
-                            **{f"rw_{k}": v for k, v in rw.items()}, lp_std=lp_items.std(0).mean(1),
+                            **{f"rw_{k}": v for k, v in rw.items()}, lp_std=lp_items[:4].std(0).mean(1),
                             lp_train_items=lp_items[0].astype(np.float16),
-                            lp_judge_items=lp_items[1:].mean(0).astype(np.float16))
+                            lp_judge_items=lp_items[1:4].mean(0).astype(np.float16),
+                            lp_snap_items=(lp_items[snap].mean(0) if snap else lp_items[1:4].mean(0)).astype(np.float16))
         (outdir / f"{fn}.json").write_text(json.dumps(summ, indent=1, ensure_ascii=False))
         print(spec, json.dumps({"ndcg@10": summ["relevance"]["ndcg@10"]["mean"],
                                 "recall@100": summ["relevance"]["recall@100"]["mean"],
