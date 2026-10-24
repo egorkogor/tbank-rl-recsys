@@ -69,6 +69,8 @@ def main():
     ap.add_argument("--copy", action="store_true", help="add the repeat channel (RepeatNet-style copy logits)")
     ap.add_argument("--copy-init", type=float, nargs=2, default=(4.0, 2.0))
     ap.add_argument("--save-every", type=int, default=1000)
+    ap.add_argument("--stop-at", type=int, default=0, help="stop after this step keeping the full-length schedule "
+                    "(the run without the repeat channel was stopped at 6000 of 10616)")
     a = ap.parse_args()
 
     torch.manual_seed(SEED)
@@ -162,8 +164,13 @@ def main():
                 print(f"ep {ep} step {step}/{total} loss {run / n_run:.4f} {time.time() - t0:.0f}s gpu {mem:.2f}G"
                       + cw, flush=True)
                 run, n_run = 0.0, 0
-            if a.max_steps and step >= a.max_steps:
+            if (a.max_steps and step >= a.max_steps) or (a.stop_at and step >= a.stop_at):
                 break
+        if a.stop_at and step >= a.stop_at:
+            torch.save({"state": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+                        "step": step, "ep": ep, "i": 0, "log": log, "best": best}, CKPT / f"{a.out}_s{step}.pt")
+            print(f"stopped at step {step}: {a.out}_s{step}.pt", flush=True)
+            return
         topk = recommend(model, seq, vsub, dev, a.len)
         rel = relevance(seq, vsub, topk)
         res = {"epoch": ep, "step": step, "sec": round(time.time() - t0),
