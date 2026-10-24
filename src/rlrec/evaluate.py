@@ -46,6 +46,8 @@ def reward_of_lists(rms: list, scorer, seq, uds: np.ndarray, lists: np.ndarray, 
         b = make_batch(seq, c, length, device)
         cand = torch.from_numpy(lists[i:i + bs]).to(device)
         side = scorer.side(c, lists[i:i + bs])
+        if "balanced" in kinds:
+            scorer.set_week(c)
         for j, rm in enumerate(rms):
             rm.eval()
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -57,6 +59,14 @@ def reward_of_lists(rms: list, scorer, seq, uds: np.ndarray, lists: np.ndarray, 
                     # the list as a session in rank order: expected listened minutes of all k tracks
                     from .rl import session_minutes
                     rk = session_minutes(p, scorer.reward(p, cand, k, side).float()).sum(1)
+                elif k == "balanced":
+                    # gain of the user's balanced minutes when the list (as a session) joins their week
+                    from .rl import balanced, session_minutes
+                    mins = session_minutes(p, scorer.reward(p, cand, "minutes", side).float())  # [R, C]
+                    cat = torch.where(side[..., 5] > 0.5, 0, torch.where(side[..., 4] > 0.5, 2, 1)).long()
+                    add = torch.zeros_like(scorer.week).scatter_add_(1, cat, mins)
+                    sh = scorer.st["bal_share"]
+                    rk = balanced(scorer.week + add, sh) - balanced(scorer.week, sh)
                 else:
                     rk = scorer.reward(p, cand, k, side).float().mean(1)
                 out[k][j, i:i + bs] = rk.cpu().numpy()

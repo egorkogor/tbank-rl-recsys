@@ -45,6 +45,8 @@ def pistar_topk(ref, rm, scorer, seq, uds, kind, beta, dev, n_cand=1000, k=100, 
             h = rm.hidden(b)[:, -1]
         lp_top, cand = logp.topk(n_cand, 1)
         side = scorer.side(c, cand.cpu().numpy())
+        if kind == "balanced":
+            scorer.set_week(c)
         r = scorer.reward(scorer.probs(rm, h, cand, side), cand, kind, side).float()
         score = r + 1e-6 * lp_top if beta == 0 else lp_top + r / beta
         order = score.topk(k, 1).indices

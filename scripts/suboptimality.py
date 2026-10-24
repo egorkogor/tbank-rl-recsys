@@ -55,6 +55,8 @@ def main():
                 h = rm.hidden(b)[:, -1]
             lr_top, cand = lr_full.topk(a.n_cand, 1)
             side = scorer.side(c, cand.cpu().numpy())
+            if kind == "balanced":
+                scorer.set_week(c)
             r = scorer.reward(scorer.probs(rm, h, cand, side), cand, kind, side).float()
             lp_top = lp_full.gather(1, cand)
             lref = F.log_softmax(lr_top, -1)

@@ -15,3 +15,7 @@ run wtg_b0.1_T1 --reward wtg --beta 0.1
 run add_b0.5_T1 --reward add --beta 0.5
 run add_b0.1_T1 --reward add --beta 0.1
 run spotify_b0.1_T5 --reward spotify --beta 0.1 --T 5 --bs 32 --steps 200
+# owner's balanced minutes B = (sum_k sqrt(s*_k M_k))^2 over old / new track of a known artist / new artist
+run balanced_b0.5_T1 --reward balanced --beta 0.5
+run balanced_b0.1_T1 --reward balanced --beta 0.1
+run balanced_b0.02_T1 --reward balanced --beta 0.02

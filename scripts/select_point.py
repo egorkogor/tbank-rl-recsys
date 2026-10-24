@@ -1,7 +1,8 @@
 """The selection rule fixed in docs/metrics_hypotheses_RU.md (section 3), applied to the val evaluation.
 
-Candidates: every RL checkpoint and pi*_beta. Objective: largest gain of the judges' expected session
-minutes of the top-10 (snapshot judges m4-m6 if present, else m1-m3). Constraints against SFT:
+Candidates: every RL checkpoint and pi*_beta. Objective (owner, 24.10): largest gain of the judges'
+balanced minutes B of the user's week with the top-10 added as a session (snapshot judges m4-m6 if
+present, else m1-m3); plain session minutes are reported next to it. Constraints against SFT:
   1. NDCG@10: verdict not "хуже" and delta >= -2 % of SFT;
   2. Recall@100 on tracks new to the user: delta >= -10 % of SFT;
   3. judges' P(skip) of the top-10: at most +0.005 over SFT;
@@ -47,7 +48,8 @@ def main():
             continue
         z, j = d["npz"], d["json"]
         ci_n = user_bootstrap(users, z["rel_ndcg@10"], b["rel_ndcg@10"])
-        ci_m = user_bootstrap(users, judges(z, "minutes"), judges(b, "minutes"))
+        ci_m = user_bootstrap(users, judges(z, "balanced"), judges(b, "balanced"))
+        ci_min = user_bootstrap(users, judges(z, "minutes"), judges(b, "minutes"))
         d_new = float(np.nanmean(z["rel_recall@100_new"])) - b_new
         d_skip = float(judges(z, "skip").mean()) - b_skip
         top = j["behaviour"]["top_item_share"]
@@ -57,17 +59,18 @@ def main():
             "skip": d_skip <= 0.005,
             "concentration": top <= 2 * b_top,
         }
-        rows.append({"spec": spec, "d_minutes": ci_m, "d_ndcg": ci_n, "d_ndcg_rel": ci_n["mean"] / b_ndcg,
+        rows.append({"spec": spec, "d_balanced": ci_m, "d_minutes": ci_min, "d_ndcg": ci_n, "d_ndcg_rel": ci_n["mean"] / b_ndcg,
                      "d_recall100_new_rel": d_new / b_new if b_new else 0.0, "d_skip": d_skip,
                      "top_item_share": top, "checks": checks, "passes": all(checks.values())})
-    rows.sort(key=lambda r: -r["d_minutes"]["mean"])
+    rows.sort(key=lambda r: -r["d_balanced"]["mean"])
     ok = [r for r in rows if r["passes"]]
     choice = ok[0]["spec"] if ok else "sft"
     out = {"choice": choice, "n_candidates": len(rows), "n_pass": len(ok), "rows": rows}
     (RUNS / "eval" / a.stage / "selection.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
     print(f"candidates {len(rows)}, pass {len(ok)}, choice: {choice}")
     for r in rows[:15]:
-        print(f"{r['spec']:28s} d_min {r['d_minutes']['mean']:+.3f} [{r['d_minutes']['lo']:+.3f},{r['d_minutes']['hi']:+.3f}]"
+        print(f"{r['spec']:28s} d_B {r['d_balanced']['mean']:+.3f} [{r['d_balanced']['lo']:+.3f},{r['d_balanced']['hi']:+.3f}]"
+              f" d_min {r['d_minutes']['mean']:+.3f}"
               f" ndcg {r['d_ndcg_rel']:+.1%} new {r['d_recall100_new_rel']:+.1%} skip {r['d_skip']:+.4f}"
               f" top {r['top_item_share']:.3f} {'PASS' if r['passes'] else 'fail ' + ','.join(k for k, v in r['checks'].items() if not v)}")
 

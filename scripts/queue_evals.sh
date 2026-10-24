@@ -6,7 +6,7 @@ PY=../.venv/Scripts/python.exe
 while [ ! -f ../logs/queue_rl.done ] || [ ! -f ../logs/queue_rl2.done ]; do sleep 30; done
 [ -f ../logs/queue_snapjudges.done ] || bash queue_snapjudges.sh
 specs="sft ckpt:sft_nocopy_s6000.pt mostpop personal copyscale:2 copyscale:4"
-for r in lp fair minutes wtg; do for b in 0.02 0.1 0.5; do specs="$specs pistar:$r:$b"; done; done
+for r in lp fair minutes wtg balanced; do for b in 0.02 0.1 0.5; do specs="$specs pistar:$r:$b"; done; done
 for d in ../artifacts/runs/rl/*/; do
   run=$(basename $d)
   case $run in calib*|smoke*) continue;; esac
