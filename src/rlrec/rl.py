@@ -12,7 +12,8 @@ from .model import append, make_batch
 from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
-REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip")
+REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip", "wtg", "add", "spotify")
+SPOTIFY_ALPHA = 0.1
 
 
 def base_lp_by_length(seq, train_end: int) -> np.ndarray:
@@ -26,6 +27,33 @@ def base_lp_by_length(seq, train_end: int) -> np.ndarray:
     return rate[np.searchsorted(LEN_EDGES, tlen)].astype(np.float32)
 
 
+def label_stats(seq, train_end: int, n_buckets: int = 20) -> dict:
+    """Train-period statistics of logged algorithmic listens for the literature rewards.
+
+    wtg (Zheng et al., MM'22, eq. 3): mean / sd of listened seconds per track-length quantile bucket;
+    add (FeedRec-style linear utility): mean / sd of listened minutes, like and skip labels;
+    spotify (Hansen et al., WSDM'21, eq. 13): popularity percentile of every track.
+    """
+    org, day, pr, tok, like = (np.asarray(seq.org), np.asarray(seq.day), np.asarray(seq.pr), np.asarray(seq.tok),
+                               np.asarray(seq.like))
+    tr = (org == 0) & (day < train_end) & (tok >= 2)
+    tlen = seq.items["track_len"]
+    L = tlen[tok[tr]]
+    sec = np.clip(pr[tr], 0, 100) / 100 * L
+    edges = np.quantile(L, np.linspace(0, 1, n_buckets + 1)[1:-1])
+    bk = np.searchsorted(edges, L)
+    cnt = np.bincount(bk, minlength=n_buckets)
+    mu = np.bincount(bk, weights=sec, minlength=n_buckets) / np.maximum(cnt, 1)
+    sd = np.sqrt(np.bincount(bk, weights=sec ** 2, minlength=n_buckets) / np.maximum(cnt, 1) - mu ** 2)
+    tb = np.searchsorted(edges, tlen)
+    pop = seq.items["log_pop"]
+    return {"wtg_mu": mu[tb].astype(np.float32), "wtg_sd": np.maximum(sd[tb], 1.0).astype(np.float32),
+            "min_mu": float((sec / 60).mean()), "min_sd": float((sec / 60).std()),
+            "like_mu": float(like[tr].mean()), "like_sd": float(like[tr].std()),
+            "skip_mu": float((pr[tr] < 10).mean()), "skip_sd": float((pr[tr] < 10).std()),
+            "pop_pct": (np.argsort(np.argsort(pop)) / len(pop)).astype(np.float32)}
+
+
 class Scorer:
     """RM probabilities and rewards for candidate tracks at given context ends."""
 
@@ -35,6 +63,8 @@ class Scorer:
         self.dev = device
         self.tlen = torch.from_numpy(seq.items["track_len"]).to(device)
         self.base = torch.from_numpy(base_lp_by_length(seq, train_end)).to(device)
+        st = label_stats(seq, train_end)
+        self.st = {k: (torch.from_numpy(v).to(device) if isinstance(v, np.ndarray) else v) for k, v in st.items()}
         # placebo: a fixed random "reward" per track with the spread of the RM's lp (no signal about users)
         g = torch.Generator().manual_seed(12345)
         self.rand = (0.68 + 0.15 * torch.randn(seq.n_tok, generator=g)).clamp(0, 1).to(device)
@@ -49,6 +79,17 @@ class Scorer:
             h = h[:, None, :].expand(-1, cands.shape[1], -1)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             return torch.sigmoid(rm.head(h, cands, side))
+
+    def spotify(self, skip, cands, side, first_in_rollout):
+        """Hansen et al. (WSDM'21, eq. 13): R = rel - c + alpha * d * rel, rel = 1 - P(skip), c = 0.1.
+        d (our adaptation) = [(1 + prior listens of the artist)^-1 + 1 - popularity percentile] / 2, zeroed
+        when the artist already appeared earlier in the same rollout."""
+        rel = 1 - skip
+        n_art = torch.expm1(side[..., 3].float() * 4)  # side feature 3 = log1p(rep_artist) / 4
+        d = (1 / (1 + n_art) + 1 - self.st["pop_pct"][cands]) / 2
+        if first_in_rollout is not None:
+            d = d * first_in_rollout
+        return rel - 0.1 + SPOTIFY_ALPHA * d * rel
 
     def reward(self, p: torch.Tensor, cands: torch.Tensor, kind: str, side: torch.Tensor | None = None) -> torch.Tensor:
         """side (the RM side features) is needed by "disc": discovery only counts for artists new to the user."""
@@ -70,6 +111,15 @@ class Scorer:
             return lp + 0.5 * like - 0.5 * skip
         if kind == "skip":
             return skip  # guardrail in evaluation (not a training reward)
+        if kind == "wtg":
+            # Watch-Time-Gain: predicted listened seconds standardised within the track-length bucket
+            return (ratio * self.tlen[cands] - self.st["wtg_mu"][cands]) / self.st["wtg_sd"][cands]
+        if kind == "add":
+            st = self.st
+            return ((ratio * self.tlen[cands] / 60 - st["min_mu"]) / st["min_sd"]
+                    + 0.25 * (like - st["like_mu"]) / st["like_sd"] - 0.25 * (skip - st["skip_mu"]) / st["skip_sd"])
+        if kind == "spotify":
+            return self.spotify(skip, cands, side, None)
         if kind == "placebo":
             return self.rand[cands]
         if kind == "disc":
@@ -150,6 +200,12 @@ def step_seq(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float
     r = scorer.reward(p, acts, kind, side)  # [R, T]
     if kind == "minutes":
         r = session_minutes(p, r)
+    if kind == "spotify":
+        art = torch.from_numpy(scorer.seq.items["artist"]).to(acts.device)[acts]  # [R, T]
+        first = torch.ones_like(art, dtype=torch.float32)
+        for t in range(1, art.shape[1]):
+            first[:, t] = (art[:, :t] != art[:, t:t + 1]).all(1).float()
+        r = scorer.spotify(p[..., 2].float(), acts, side, first)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         logp = F.log_softmax(policy.logits_pos(full, policy.hidden(full), pos.tolist()), -1)  # [R, T, V]
     lp_a = logp.gather(2, acts[:, :, None])[:, :, 0].sum(1)
