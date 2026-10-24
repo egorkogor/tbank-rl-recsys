@@ -23,3 +23,6 @@ run balanced_b5_T1 --reward balanced --beta 5
 run balanced_b2_T1 --reward balanced --beta 2
 run minutes_b20_T1 --reward minutes --beta 20
 run minutes_b5_T1 --reward minutes --beta 5
+# owner's idea: minutes + completion bonus (standardised, equal weights)
+run mlp_b0.5_T1 --reward mlp --beta 0.5
+run mlp_b0.1_T1 --reward mlp --beta 0.1

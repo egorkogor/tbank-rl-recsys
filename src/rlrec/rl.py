@@ -13,7 +13,7 @@ from .rm import HistoryCounts, side_features
 
 LEN_EDGES = np.array([90, 150, 200, 250, 330, 480])
 REWARDS = ("ratio", "lp", "fair", "cont", "sec", "mix", "disc", "placebo", "minutes", "skip", "wtg", "add", "spotify",
-           "balanced")
+           "balanced", "mlp")
 # Balanced minutes (owner's metric, 24.10, revised): B = T * K(s), T = old + new minutes of the week,
 # s = new / T, new = tracks the user had not heard (any artist). BC(s) = sqrt(s s*) + sqrt((1-s)(1-s*));
 # K = BC^2 below the target share s*, K = 1 - KAPPA (1 - BC^2) above it (too much new costs 4x less than
@@ -81,6 +81,7 @@ def label_stats(seq, train_end: int, n_buckets: int = 20) -> dict:
             "min_mu": float((sec / 60).mean()), "min_sd": float((sec / 60).std()),
             "like_mu": float(like[tr].mean()), "like_sd": float(like[tr].std()),
             "skip_mu": float((pr[tr] < 10).mean()), "skip_sd": float((pr[tr] < 10).std()),
+            "lp_mu": float((pr[tr] >= 50).mean()), "lp_sd": float((pr[tr] >= 50).std()),
             "pop_pct": (np.argsort(np.argsort(pop)) / len(pop)).astype(np.float32)}
 
 
@@ -183,6 +184,11 @@ class Scorer:
                     + 0.25 * (like - st["like_mu"]) / st["like_sd"] - 0.25 * (skip - st["skip_mu"]) / st["skip_sd"])
         if kind == "spotify":
             return self.spotify(skip, cands, side, None)
+        if kind == "mlp":
+            # owner's idea: minutes plus a bonus for a completed (Listen+) track, both standardised on the train
+            # labels so that neither part needs a hand-picked minutes-per-completion exchange rate
+            st = self.st
+            return ((ratio * self.tlen[cands] / 60 - st["min_mu"]) / st["min_sd"] + (lp - st["lp_mu"]) / st["lp_sd"])
         if kind == "balanced":
             # expected minutes of the track x marginal value of a minute of its category for this user
             return ratio * self.tlen[cands] / 60.0 * self.balanced_marginal(side)
