@@ -187,8 +187,10 @@ def main():
             row[k] = {"base": base_mean, "spec": float(np.nanmean(v)), "delta": ci}
             if k.startswith("R1") or k.startswith("R2"):
                 row[k]["verdict"] = verdict(ci, REL_THRESHOLD * base_mean)
-            elif k.startswith("J") or k.startswith("R3"):
+            elif k.startswith("J"):
                 row[k]["verdict"] = verdict(ci, REWARD_THRESHOLD)
+            elif k.startswith("R3"):  # fewer disliked tracks is better: the words of the negated difference
+                row[k]["verdict"] = verdict({"mean": -ci["mean"], "lo": -ci["hi"], "hi": -ci["lo"]}, REWARD_THRESHOLD)
         dB, dBn = row["B"]["delta"]["mean"], row["B_neutral"]["delta"]["mean"]
         row["B_not_length_share"] = dBn / dB if abs(dB) > 1e-9 else None
         s0, s1 = bucket[tops[a.base]].ravel(), bucket[tops[spec]].ravel()
