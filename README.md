@@ -495,13 +495,16 @@ python scripts/verify_freeze.py --checkpoints
 
 **Что лежит в репозитории, а что нет.** В Git входят код, документы, рисунки и JSON с итоговыми агрегатами: заморозки, оценки val/OOT, сравнения, диагностика и расчёт A/B. Числа можно сверить без загрузки данных. В `artifacts/runs/eval/val/booster_judge_b0_summary.json` и `artifacts/runs/eval/oot/booster_judge_b0_summary.json` оставлены средние и ДИ; идентификаторы пользователь-дней и построчные оценки исключены. Данные Yambda, чекпойнты, последовательности, выдачи `.npz` и логи обучения в Git не входят.
 
-Для полного воспроизведения сначала подготовьте `events.parquet` и `items.parquet` в репозитории задания 1 tbank-recsys-autofeatures (загрузка через `scripts/download_yambda.py`, подготовка через `tbrec.data.prepare` в том репозитории). Укажите эту папку через `TBANK_DATA`; `scripts/prepare.py` соберёт локальные последовательности. Чекпойнты и выдачи получаются командами ниже после обучения. Для внешнего судьи также нужны подготовленные данные и модель задания 1; путь задаётся через `TBANK_TASK1`, Python с LightGBM для очередей — через `TBANK_TASK1_PYTHON`. Команды описывают исторический конвейер; замороженные OOT-результаты не перезапускаются при проверке сдачи.
+Для полного воспроизведения сначала подготовьте `events.parquet` и `items.parquet` в [репозитории задания №1](https://github.com/egorkogor/tbank-recsys-autofeatures) (загрузка через `scripts/download_yambda.py`, подготовка через `tbrec.data.prepare` в том репозитории). Укажите эту папку через `TBANK_DATA`; `scripts/prepare.py` соберёт локальные последовательности. Чекпойнты и выдачи получаются командами ниже после обучения. Для внешнего судьи также нужны подготовленные данные и модель задания 1; путь задаётся через `TBANK_TASK1`, Python с LightGBM для очередей — через `TBANK_TASK1_PYTHON`. Команды описывают исторический конвейер; замороженные OOT-результаты не перезапускаются при проверке сдачи.
+
+Репозиторий задания №1 пока приватный; для полного воспроизведения нужен доступ к нему. При открытии репозитория ссылка останется прежней.
 
 Перед обучением нужны `events.parquet` с полями `uid, item, artist, t, day, kind, org, pr` и `items.parquet` с `item, track_len`. Время `t` — секунды, отсчёт дней задаётся в `src/rlrec/config.py`; `kind` кодирует listen/like/dislike/unlike/undislike как 0/1/2/3/4. В этой работе таблицы подготовлены в задании №1. Его код подготовки необходим для полного повторения отбора пользователей и преобразования времени; сырой файл Yambda напрямую этому контракту не соответствует.
 
 ```bash
 mkdir -p logs
 python -m uv sync                                  # Python 3.12, torch 2.12 cu126, transformers 5.9
+source .venv/Scripts/activate                       # Windows, Git Bash; далее python из окружения проекта
 # events.parquet / items.parquet из подготовки Yambda-50M (TBANK_DATA указывает на папку)
 python scripts/prepare.py                          # последовательности, словарь, пользователь-дни, история пар
 python -m pytest -p no:cacheprovider tests         # тесты утечек
