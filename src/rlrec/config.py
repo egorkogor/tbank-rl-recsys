@@ -8,8 +8,8 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# events.parquet / items.parquet built by task 1 (same contract as scripts/prepare_events.py here).
-DATA = Path(os.environ.get("TBANK_DATA", "D:/PdM_Projects/tbank-recsys-autofeatures/data/processed"))
+# events.parquet / items.parquet built by task 1 (prepared by tbrec.data.prepare in task 1).
+DATA = Path(os.environ.get("TBANK_DATA", ROOT.parent / "tbank-recsys-autofeatures" / "data" / "processed"))
 ART = ROOT / "artifacts"
 SEQ = ART / "seq"
 CKPT = Path(os.environ.get("RLREC_CKPT", ART / "ckpt"))

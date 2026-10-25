@@ -1,0 +1,24 @@
+{
+ "spec": "pistarlen:minutes:2:2",
+ "base": "sft",
+ "stage": "oot",
+ "note": "Post-OOT diagnostic from saved arrays; no inference or generation. The second OOT run remains labelled in freeze_post_oot.json.",
+ "method": "paired user bootstrap, n_boot=1000, seed=0, 95% CI",
+ "d_ndcg@10": {
+  "mean": 0.00020526880258961593,
+  "lo": -0.00035898903103343454,
+  "hi": 0.0007646559115829554,
+  "n_users": 7723
+ },
+ "v_ndcg@10": "сопоставимо",
+ "d_ndcg_rel": 0.0012583517720924392,
+ "checks": {
+  "ndcg": true,
+  "new_tracks": true,
+  "skip": true,
+  "concentration": true,
+  "completion": true,
+  "length_profile": true
+ },
+ "passes": true
+}

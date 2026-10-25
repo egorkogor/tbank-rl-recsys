@@ -299,7 +299,7 @@ KION — проверка переносимости, если останетс�
 
 ## 14. Репозиторий
 
-`D:/PdM_Projects/tbank-rl-recsys/`, отдельный git без удалённого репозитория.
+`./`, отдельный git без удалённого репозитория.
 
 - `src/rlrec/`: `data.py` (последовательности, словарь), `model.py` (политика GPT-2), `rm.py`, `rl.py`, `evaluate.py`, `metrics.py`.
 - `scripts/`, `tests/`, `configs/`, `docs/`.

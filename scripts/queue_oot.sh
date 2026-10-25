@@ -3,7 +3,7 @@
 # freeze.json records the commit, thresholds, checkpoint hashes and the specs; OOT results are never overwritten.
 cd "$(dirname "$0")"
 PY=../.venv/Scripts/python.exe
-PY1=D:/PdM_Projects/tbank-recsys-autofeatures/.venv/Scripts/python.exe
+PY1="${TBANK_TASK1_PYTHON:-../../tbank-recsys-autofeatures/.venv/Scripts/python.exe}"
 L=../logs/oot.log
 while [ ! -f ../logs/queue_analysis.done ]; do sleep 60; done
 choice=$($PY -c "import json;print(json.load(open('../artifacts/runs/eval/val/selection.json'))['choice'])")

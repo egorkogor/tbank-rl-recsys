@@ -3,7 +3,7 @@
 # five steps ahead, and task 1's booster as an external judge. Steps with an existing output are skipped.
 cd "$(dirname "$0")"
 PY=../.venv/Scripts/python.exe
-PY1=D:/PdM_Projects/tbank-recsys-autofeatures/.venv/Scripts/python.exe   # has lightgbm; task 1 files read only
+PY1="${TBANK_TASK1_PYTHON:-../../tbank-recsys-autofeatures/.venv/Scripts/python.exe}"   # has lightgbm; task 1 files read only
 E=../artifacts/runs/eval/val
 L=../logs/analysis.log
 while [ ! -f ../logs/queue_evals.done ]; do sleep 60; done

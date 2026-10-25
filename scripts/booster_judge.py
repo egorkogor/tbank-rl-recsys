@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-TASK1 = Path(os.environ.get("TBANK_TASK1", "D:/PdM_Projects/tbank-recsys-autofeatures"))
+TASK1 = Path(os.environ.get("TBANK_TASK1", Path(__file__).resolve().parents[2] / "tbank-recsys-autofeatures"))
 os.environ.setdefault("TBREC_CORES", os.environ.get("RLREC_CORES", "0-2"))  # our CPU budget, not task 1's cores
 sys.path.insert(0, str(TASK1 / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
