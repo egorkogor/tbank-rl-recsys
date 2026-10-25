@@ -9,6 +9,10 @@ present, else m1-m3); plain session minutes are reported next to it. Constraints
   4. share of user-days whose top-10 holds the most frequent track: at most 2 x SFT;
   5. judges' P(Listen+) of the top-10 (completion, owner 24.10): at most 0.005 below SFT.
 If nothing passes, the recommendation is SFT.
+
+--len-guard g (post-OOT, docs/post_oot_diagnostics_RU.md): a sixth constraint, the personal length profile
+len_dev_user_log at most (1 + g) x SFT; the length-penalised pi* (pistarlen:) join the candidates and the
+result goes to selection_lenguard.json. Without the flag the rule is the frozen one (selection.json).
 """
 import argparse
 import json
@@ -33,6 +37,7 @@ def judges(z: dict, kind: str) -> np.ndarray:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", default="val")
+    ap.add_argument("--len-guard", type=float, default=0.0)
     a = ap.parse_args()
     seq = Seq()
     ev = load(a.stage)
@@ -44,9 +49,11 @@ def main():
     b_skip = float(judges(b, "skip").mean())
     b_lp = float(judges(b, "lp").mean())
     b_top = base["json"]["behaviour"]["top_item_share"]
+    b_len = base["json"]["behaviour"]["len_dev_user_log"]
+    prefixes = ("rl:", "pistar:", "pistarlen:") if a.len_guard else ("rl:", "pistar:")
     rows = []
     for spec, d in ev.items():
-        if not (spec.startswith("rl:") or spec.startswith("pistar:")):
+        if not spec.startswith(prefixes):
             continue
         z, j = d["npz"], d["json"]
         ci_n = user_bootstrap(users, z["rel_ndcg@10"], b["rel_ndcg@10"])
@@ -63,14 +70,17 @@ def main():
             "concentration": top <= 2 * b_top,
             "completion": d_lp >= -0.005,
         }
+        if a.len_guard:
+            checks["length_profile"] = j["behaviour"]["len_dev_user_log"] <= (1 + a.len_guard) * b_len
         rows.append({"spec": spec, "d_balanced": ci_m, "d_minutes": ci_min, "d_ndcg": ci_n, "d_ndcg_rel": ci_n["mean"] / b_ndcg,
                      "d_recall100_new_rel": d_new / b_new if b_new else 0.0, "d_skip": d_skip, "d_lp": d_lp,
-                     "top_item_share": top, "checks": checks, "passes": all(checks.values())})
+                     "top_item_share": top, "len_dev_user_log": j["behaviour"]["len_dev_user_log"], "checks": checks, "passes": all(checks.values())})
     rows.sort(key=lambda r: -r["d_balanced"]["mean"])
     ok = [r for r in rows if r["passes"]]
     choice = ok[0]["spec"] if ok else "sft"
     out = {"choice": choice, "n_candidates": len(rows), "n_pass": len(ok), "rows": rows}
-    (RUNS / "eval" / a.stage / "selection.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    name = "selection_lenguard.json" if a.len_guard else "selection.json"
+    (RUNS / "eval" / a.stage / name).write_text(json.dumps(out, indent=1, ensure_ascii=False))
     print(f"candidates {len(rows)}, pass {len(ok)}, choice: {choice}")
     for r in rows[:15]:
         print(f"{r['spec']:28s} d_B {r['d_balanced']['mean']:+.3f} [{r['d_balanced']['lo']:+.3f},{r['d_balanced']['hi']:+.3f}]"

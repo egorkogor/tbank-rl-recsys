@@ -7,7 +7,10 @@ Specs:
   rl:<run>:<step>          checkpoint of an RL run (artifacts/runs/rl/<run>/step<step>.pt)
   pistar:<reward>:<beta>   closed-form optimum of the T = 1 objective on the SFT top-1000:
                            score = log pi_ref + r_train / beta (beta = 0: reward only)
-  mostpop                  most listened tracks of the 7 days before the day
+  pistarlen:<reward>:<beta>:<lam>
+                           the same with a penalty for leaving the user's length profile (post-OOT, 25.10):
+                           score - lam * |log L - log L_u|, L_u from the tracks heard before the day
+  mostpop                 most listened tracks of the 7 days before the day
   personal                 the user's most Listen+'d tracks of the 30 days before the day, then mostpop
 
 Per spec: top-100, relevance per user-day, behaviour, and the mean RM reward of the top-10 for every
@@ -33,10 +36,24 @@ from rlrec.rl import REWARDS, Scorer  # noqa: E402
 from rlrec.rm import load_rm  # noqa: E402
 
 
+def user_loglen(seq, ctx) -> np.ndarray:
+    """Mean log length of the distinct tracks heard before the day: the personal length profile of
+    metrics.behaviour (len_dev_user_log); NaN without in-vocabulary history."""
+    loglen = np.log(np.clip(seq.items["track_len"], 10, 3600))
+    out = np.full(len(ctx), np.nan, np.float32)
+    for r, (s, e) in enumerate(ctx):
+        h = np.unique(np.asarray(seq.tok[s:e]))
+        h = h[h >= N_SPECIAL]
+        if len(h):
+            out[r] = loglen[h].mean()
+    return out
+
+
 @torch.no_grad()
-def pistar_topk(ref, rm, scorer, seq, uds, kind, beta, dev, n_cand=1000, k=100, bs=64):
+def pistar_topk(ref, rm, scorer, seq, uds, kind, beta, dev, n_cand=1000, k=100, bs=64, lam=0.0):
     ctx = contexts(seq, uds)
     out = np.zeros((len(uds), k), np.int64)
+    loglen = torch.log(scorer.tlen.clamp(10, 3600))
     for i in range(0, len(uds), bs):
         c = ctx[i:i + bs]
         b = make_batch(seq, c, 256, dev)
@@ -49,6 +66,9 @@ def pistar_topk(ref, rm, scorer, seq, uds, kind, beta, dev, n_cand=1000, k=100, 
             scorer.set_week(c)
         r = scorer.reward(scorer.probs(rm, h, cand, side), cand, kind, side).float()
         score = r + 1e-6 * lp_top if beta == 0 else lp_top + r / beta
+        if lam:
+            lu = torch.from_numpy(user_loglen(seq, c)).to(dev)
+            score = score - lam * torch.nan_to_num((loglen[cand] - lu[:, None]).abs())
         order = score.topk(k, 1).indices
         out[i:i + bs] = cand.gather(1, order).cpu().numpy()
     return out
@@ -102,6 +122,9 @@ def topk_for(spec, seq, uds, dev, ref, rm0, scorer):
     if kind == "pistar":
         rw, beta = rest
         return pistar_topk(ref, rm0, scorer, seq, uds, rw, float(beta), dev)
+    if kind == "pistarlen":
+        rw, beta, lam = rest
+        return pistar_topk(ref, rm0, scorer, seq, uds, rw, float(beta), dev, lam=float(lam))
     raise ValueError(spec)
 
 
