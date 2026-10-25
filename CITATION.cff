@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+type: software
+message: "If you use this code or its results in your work, please cite this repository."
+authors:
+  - family-names: "Meadoed"
+    given-names: "Egor"
+title: "RL-дообучение последовательного рекомендателя против модели вознаграждения (Yambda-50M)"
+version: "0.1.0"
+date-released: 2026-10-25
+license: MIT
+repository-code: "https://github.com/egorkogor/tbank-rl-recsys"
+url: "https://github.com/egorkogor/tbank-rl-recsys"
