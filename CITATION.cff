@@ -2,7 +2,7 @@ cff-version: 1.2.0
 type: software
 message: "If you use this code or its results in your work, please cite this repository."
 authors:
-  - family-names: "Meadoed"
+  - family-names: "Lozovoi"
     given-names: "Egor"
 title: "RL-дообучение последовательного рекомендателя против модели вознаграждения (Yambda-50M)"
 version: "0.1.0"
