@@ -16,6 +16,7 @@ from scipy.stats import rankdata  # noqa: E402
 
 from rlrec.config import ART, CKPT, DEVICE, N_SPECIAL, OOT_DAYS, RUNS, T_END, TRAIN_END, VAL_DAYS  # noqa: E402
 from rlrec.data import Seq, adopt_label, label_valid_eval  # noqa: E402
+from rlrec.protocol import verify_checkpoint_map  # noqa: E402
 from rlrec.model import limit_gpu, make_batch  # noqa: E402
 from rlrec.rm import HEADS, load_rm, logged_counts, side_features  # noqa: E402
 
@@ -152,6 +153,14 @@ def main():
     a = ap.parse_args()
     if a.stage == "oot" and not (ART / "freeze.json").exists():
         sys.exit("OOT needs artifacts/freeze.json")
+    if a.stage == "oot":
+        tag = "" if a.members == "0,1,2,3" else "_m" + a.members.replace(",", "")
+        saved = RUNS / f"rm_eval_oot{'_snapshot' if a.snapshot else ''}{tag}.json"
+        if saved.exists():
+            print("OOT reward-model evaluation already exists; no model was loaded")
+            return
+        frozen = json.loads((ART / "freeze.json").read_text("utf-8"))
+        verify_checkpoint_map(ART, frozen["checkpoints"])
     days = VAL_DAYS if a.stage == "val" else OOT_DAYS
     dev = torch.device(DEVICE)
     limit_gpu(dev)

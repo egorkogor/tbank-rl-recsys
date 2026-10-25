@@ -3,16 +3,13 @@ data/
 __pycache__/
 *.pyc
 .pytest_cache/
-logs/*
-!logs/codex/
-logs/codex/*
-!logs/codex/*_prompt.md
-!logs/codex/*_report.md
+logs/
 src/*.egg-info/
 
 # Publish only aggregate evidence. Raw arrays, policies and user-day scores stay local.
 artifacts/*
 !artifacts/freeze*.json
+!artifacts/source_summary.json
 !artifacts/runs/
 artifacts/runs/*
 !artifacts/runs/ab_power.json
@@ -33,3 +30,13 @@ artifacts/runs/eval/val/diag/*
 artifacts/runs/eval/oot/diag/*
 !artifacts/runs/eval/val/diag/diag.json
 !artifacts/runs/eval/oot/diag/diag.json
+
+# Local working notes; not part of the submission.
+docs/decisions_RU.md
+docs/literature_review_prompt_RU.md
+docs/literature_review_RU.md
+docs/ml_system_design_RU.md
+docs/progress_report_plain_RU.md
+docs/task_plain_RU.md
+docs/yandex_practice_RU.md
+docs/reward_formulas_review_RU.md

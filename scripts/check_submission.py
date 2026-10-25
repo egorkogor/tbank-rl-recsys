@@ -8,10 +8,17 @@ import subprocess
 
 
 def check(root):
-    tracked = subprocess.check_output(
-        ['git', '-c', 'safe.directory=' + root.as_posix(), '-c', 'core.excludesFile=', 'ls-files'],
-        cwd=root, text=True, encoding='utf-8').splitlines()
+    if (root / '.git').exists():
+        tracked = subprocess.check_output(
+            ['git', '-c', 'safe.directory=' + root.as_posix(), '-c', 'core.excludesFile=', 'ls-files'],
+            cwd=root, text=True, encoding='utf-8').splitlines()
+    else:
+        # An extracted submission has no Git metadata.
+        tracked = sorted(p.relative_to(root).as_posix() for p in root.rglob('*')
+                         if p.is_file() and not {'.git', '.venv', '__pycache__', '.pytest_cache'}.intersection(p.parts))
     files = set(tracked)
+    if any(f.startswith('logs/') for f in tracked):
+        raise ValueError('Working logs must stay outside the submission')
     problems = []
     runtime_references = []
     total_json = 0

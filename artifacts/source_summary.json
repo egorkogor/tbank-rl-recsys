@@ -1,0 +1,10 @@
+{
+ "source": "prepared Yambda-50M tables from task 1",
+ "note": "Counts only; no user/event rows. The policy sequence contains listeners, not users with only other event types.",
+ "events": 47790449,
+ "all_event_users": 10000,
+ "listen_users": 9238,
+ "listens": 46467212,
+ "first_day": 0,
+ "last_day": 300
+}

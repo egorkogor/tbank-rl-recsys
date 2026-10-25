@@ -276,6 +276,11 @@ def rollout(policy, b: dict, T: int, greedy: bool = False, ban_repeats: bool = F
 
 
 def step_seq(policy, ref, rm, scorer, b: dict, ctx: list, kind: str, beta: float, G: int, T: int) -> dict:
+    """RLOO with a local KL penalty on sampled prefixes.
+
+    The state-distribution score-function term for future KL costs is omitted;
+    this is not the exact gradient of a full trajectory-level KL objective.
+    """
     B, L = b["tok"].shape
     bg = {k: v.repeat_interleave(G, 0) for k, v in b.items()}
     ctx_g = [c for c in ctx for _ in range(G)]

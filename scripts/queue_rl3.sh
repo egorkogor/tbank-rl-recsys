@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rewards from the literature search (docs/reward_formulas_review_RU.md), called at the end of queue_rl2.sh.
+# Rewards from the literature search (docs/related_work_RU.md), called at the end of queue_rl2.sh.
 cd "$(dirname "$0")"
 PY=../.venv/Scripts/python.exe
 run() {

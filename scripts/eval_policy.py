@@ -34,6 +34,7 @@ from rlrec.metrics import behaviour, relevance, user_bootstrap  # noqa: E402
 from rlrec.model import limit_gpu, load_policy, make_batch  # noqa: E402
 from rlrec.rl import REWARDS, Scorer  # noqa: E402
 from rlrec.rm import load_rm  # noqa: E402
+from rlrec.protocol import admit_oot  # noqa: E402
 
 
 def user_loglen(seq, ctx) -> np.ndarray:
@@ -136,6 +137,13 @@ def main():
     a = ap.parse_args()
     if a.stage == "oot" and not (ART / "freeze.json").exists():
         sys.exit("OOT needs artifacts/freeze.json")
+    if a.stage == "oot":
+        if a.subset:
+            sys.exit("OOT protocol requires the full frozen evaluation set")
+        a.specs = admit_oot(ART, RUNS / "eval" / "oot", a.specs)
+        if not a.specs:
+            print("All requested OOT results already exist; no model was loaded")
+            return
     days = VAL_DAYS if a.stage == "val" else OOT_DAYS
     dev = torch.device(DEVICE)
     limit_gpu(dev)
