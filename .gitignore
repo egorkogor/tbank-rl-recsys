@@ -1,5 +1,4 @@
 data/
-artifacts/
 .venv/
 __pycache__/
 *.pyc
@@ -10,3 +9,27 @@ logs/codex/*
 !logs/codex/*_prompt.md
 !logs/codex/*_report.md
 src/*.egg-info/
+
+# Publish only aggregate evidence. Raw arrays, policies and user-day scores stay local.
+artifacts/*
+!artifacts/freeze*.json
+!artifacts/runs/
+artifacts/runs/*
+!artifacts/runs/ab_power.json
+!artifacts/runs/rm_eval*.json
+!artifacts/runs/eval/
+artifacts/runs/eval/*
+!artifacts/runs/eval/val/
+!artifacts/runs/eval/oot/
+artifacts/runs/eval/val/*
+artifacts/runs/eval/oot/*
+!artifacts/runs/eval/val/*.json
+!artifacts/runs/eval/oot/*.json
+artifacts/runs/eval/val/booster_judge_b0.json
+artifacts/runs/eval/oot/booster_judge_b0.json
+!artifacts/runs/eval/val/diag/
+!artifacts/runs/eval/oot/diag/
+artifacts/runs/eval/val/diag/*
+artifacts/runs/eval/oot/diag/*
+!artifacts/runs/eval/val/diag/diag.json
+!artifacts/runs/eval/oot/diag/diag.json

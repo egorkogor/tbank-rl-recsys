@@ -1,0 +1,28 @@
+{
+ "time": "2026-10-25 06:45:52",
+ "commit": "27e07f3418805ba341d7201b97cbb26d81369463",
+ "spec": "pistarlen:minutes:2:2",
+ "rule": "post-OOT rule of docs/post_oot_diagnostics_RU.md section 3 on val (frozen five constraints + length profile <= 1.1 x SFT)",
+ "note": "second OOT run, after the first one was unsealed; checkpoints are those of freeze.json",
+ "checkpoints": {
+  "ckpt\\sft.pt": "2dd329e7990987e5",
+  "ckpt\\sft_nocopy_s6000.pt": "062d3b11c7965c35",
+  "ckpt\\rm_m0.pt": "d184109f93ad0c5f",
+  "ckpt\\rm_m1.pt": "f74f80c801f1a644",
+  "ckpt\\rm_m2.pt": "f7c0ac70c2df1df5",
+  "ckpt\\rm_m3.pt": "dd96a9ab737f4e4c",
+  "ckpt\\rm_m4.pt": "9140551c675e13bc",
+  "ckpt\\rm_m5.pt": "ae3f098126a0dc12",
+  "ckpt\\rm_m6.pt": "25cc72c64c083dec",
+  "runs\\rl\\lp_b0.5_T1\\step400.pt": "ffd5b7262d42cc3c",
+  "runs\\rl\\lp_b0.1_T1\\step400.pt": "7a5ccccbb002ad0f",
+  "runs\\rl\\lp_b0.02_T1\\step400.pt": "a3c7f47169dba052",
+  "runs\\rl\\lp_b0_T1\\step400.pt": "7df90a056161c0f2",
+  "runs\\rl\\minutes_b0.5_T1\\step400.pt": "b4814f1ccf1cb1c2",
+  "runs\\rl\\balanced_b5_T1\\step400.pt": "0d59928dd2ee768c",
+  "runs\\rl\\balanced_b2_T1\\step400.pt": "47c64491f8a3eee0",
+  "runs\\rl\\mix_b0.1_T1\\step400.pt": "7c84eafed90f5e78",
+  "runs\\rl\\wtg_b0.5_T1\\step400.pt": "6b7908ec569e8736",
+  "runs\\rl\\placebo_b0.1_T1\\step400.pt": "0a0abd54662c39b0"
+ }
+}

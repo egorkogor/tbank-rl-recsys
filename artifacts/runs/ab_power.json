@@ -1,0 +1,87 @@
+{
+ "users_active_week": 8194,
+ "balanced_s_star": [
+  0.722,
+  0.164,
+  0.114
+ ],
+ "balance_coef_mean": 0.9323564631889126,
+ "balanced_per_user_week": {
+  "mean": 376.5709624479023,
+  "sd": 490.5640591123372,
+  "rho_prev_week": 0.7022466847116361,
+  "n_per_arm_1pct": 266401,
+  "n_per_arm_2pct": 66601,
+  "cuped_n_per_arm_1pct": 135026,
+  "cuped_n_per_arm_2pct": 33757,
+  "cuped_n_per_arm_5pct": 5402
+ },
+ "minutes_per_user_week": {
+  "mean": 395.1537542714181,
+  "sd": 512.6143202611695,
+  "rho_prev_week": 0.6943328310086742,
+  "n_per_arm_1pct": 264173,
+  "n_per_arm_2pct": 66044,
+  "cuped_n_per_arm_1pct": 136816,
+  "cuped_n_per_arm_2pct": 34204,
+  "cuped_n_per_arm_5pct": 5473
+ },
+ "sessions_per_user_week": {
+  "mean": 9.357578716133757,
+  "sd": 8.253269811275203,
+  "rho_prev_week": 0.7701731204890166,
+  "n_per_arm_1pct": 122114,
+  "n_per_arm_2pct": 30529,
+  "cuped_n_per_arm_1pct": 49680,
+  "cuped_n_per_arm_2pct": 12420,
+  "cuped_n_per_arm_5pct": 1988
+ },
+ "adopted_artists_per_user_week": {
+  "mean": 0.5840859165242861,
+  "sd": 2.1582658314056853,
+  "rho_prev_week": 0.3705398511486799,
+  "n_per_arm_1pct": 2143355,
+  "n_per_arm_2pct": 535839,
+  "cuped_n_per_arm_1pct": 1849073,
+  "cuped_n_per_arm_2pct": 462269,
+  "cuped_n_per_arm_5pct": 73963
+ },
+ "new_artist_minutes_share": {
+  "mean": 0.10486090949714424,
+  "n_per_arm_2pct": 90405,
+  "n_per_arm_5pct": 14465
+ },
+ "listen_plus_per_user_week": {
+  "mean": 117.77446912374909,
+  "sd": 157.81233205229503,
+  "n_per_arm_1pct": 281850,
+  "n_per_arm_2pct": 70463,
+  "rho_prev_week": 0.6938437059578031,
+  "cuped_n_per_arm_1pct": 146162,
+  "cuped_n_per_arm_2pct": 36541
+ },
+ "active_days_per_user_week": {
+  "mean": 4.037466438857701,
+  "sd": 2.1396080487563576,
+  "n_per_arm_1pct": 44085,
+  "n_per_arm_2pct": 11022,
+  "rho_prev_week": 0.6795349233591474,
+  "cuped_n_per_arm_1pct": 23728,
+  "cuped_n_per_arm_2pct": 5932
+ },
+ "plays_per_user_week": {
+  "mean": 183.16206980717598,
+  "sd": 220.71916503429463,
+  "n_per_arm_1pct": 227954,
+  "n_per_arm_2pct": 56989,
+  "rho_prev_week": 0.6744317395299944,
+  "cuped_n_per_arm_1pct": 124268,
+  "cuped_n_per_arm_2pct": 31067
+ },
+ "algo_listen_plus_share": {
+  "mean": 0.6930066382903646,
+  "sd_linearised": 0.5243771600682388,
+  "n_per_arm_1pct": 89878,
+  "n_per_arm_2pct": 22470
+ }
+}

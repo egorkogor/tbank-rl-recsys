@@ -1,0 +1,90 @@
+{
+ "meta": {
+  "model": "b0",
+  "users": 1000,
+  "userdays": 4062,
+  "k": 10
+ },
+ "provenance": {
+  "source": "booster_judge_b0.json",
+  "source_sha256": "320da5a2b34681d20843978bcb54650323364be7267f6756e992ff391f358a15",
+  "note": "Aggregates only; paired bootstrap over user-days from saved rounded scores; no model inference.",
+  "n_boot": 1000,
+  "seed": 0,
+  "confidence": 0.95
+ },
+ "models": {
+  "sft": {
+   "booster_mean_top10": 0.6731162491897597,
+   "delta_to_sft": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0
+   }
+  },
+  "personal": {
+   "booster_mean_top10": 0.7133740636828371,
+   "delta_to_sft": {
+    "mean": 0.04025777941900542,
+    "lo": 0.03836548996799606,
+    "hi": 0.042086325701624815
+   }
+  },
+  "copyscale:4": {
+   "booster_mean_top10": 0.6718942616973311,
+   "delta_to_sft": {
+    "mean": -0.0012220433284096499,
+    "lo": -0.002139360352043328,
+    "hi": -0.0003784103889709498
+   }
+  },
+  "pistar:lp:0.1": {
+   "booster_mean_top10": 0.7138864898314705,
+   "delta_to_sft": {
+    "mean": 0.040770228951255545,
+    "lo": 0.039295428421959634,
+    "hi": 0.042302331856228455
+   }
+  },
+  "pistar:balanced:5": {
+   "booster_mean_top10": 0.672310825929353,
+   "delta_to_sft": {
+    "mean": -0.0008054234367306747,
+    "lo": -0.00127621011816839,
+    "hi": -0.00035926840226489505
+   }
+  },
+  "rl:lp_b0.1_T1:400": {
+   "booster_mean_top10": 0.6793817724232798,
+   "delta_to_sft": {
+    "mean": 0.006265489906450024,
+    "lo": 0.005733426944854751,
+    "hi": 0.006820814623338257
+   }
+  },
+  "rl:lp_b0_T1:400": {
+   "booster_mean_top10": 0.7432815780857508,
+   "delta_to_sft": {
+    "mean": 0.07016535204332841,
+    "lo": 0.06724236435253571,
+    "hi": 0.0730525849335303
+   }
+  },
+  "rl:balanced_b5_T1:400": {
+   "booster_mean_top10": 0.6702169655566257,
+   "delta_to_sft": {
+    "mean": -0.0028993549975381574,
+    "lo": -0.003345484551944853,
+    "hi": -0.0024445585302806496
+   }
+  },
+  "pistar:minutes:2": {
+   "booster_mean_top10": 0.6718802893577802,
+   "delta_to_sft": {
+    "mean": -0.0012358961102904974,
+    "lo": -0.0019938685992122113,
+    "hi": -0.0005391163835548995
+   }
+  }
+ }
+}
